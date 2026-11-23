@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messenger v1 (Insecure Naive Client)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="badge-v1">TARGET: CLIENT v1 (INSECURE)</div>
+            <h1>Messenger v1</h1>
+            <p class="subtitle">⚠️ Deliberately insecure: Plaintext, no key verification, no replay protection.</p>
+        </header>
+
+        <!-- Login / User Selection -->
+        <div class="card login-card" id="loginSection">
+            <h3>Identity Login</h3>
+            <div class="input-row">
+                <input type="text" id="usernameInput" placeholder="Enter username (e.g., alice, bob)" />
+                <button id="loginBtn" class="btn btn-primary">Login</button>
+            </div>
+        </div>
+
+        <!-- Chat App Section (Hidden until logged in) -->
+        <div class="card chat-card" id="chatSection" style="display: none;">
+            <div class="chat-header">
+                <div>
+                    Logged in as: <strong id="currentUserDisplay" class="highlight-user"></strong>
+                </div>
+                <div class="recipient-select">
+                    <label for="recipientInput">Chatting with:</label>
+                    <input type="text" id="recipientInput" placeholder="Recipient username (e.g., bob)" />
+                </div>
+            </div>
+
+            <div class="vulnerability-banner">
+                <strong>Vulnerabilities Active:</strong>
+                <ul>
+                    <li>Messages sent in raw plaintext to server.</li>
+                    <li>No public key exchange or fingerprint check.</li>
+                    <li>No sequence counter: Replayed messages accepted silently.</li>
+                    <li>No AEAD: Tampered ciphertext or server payload displayed without warning.</li>
+                </ul>
+            </div>
+
+            <!-- Messages Log -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="empty-state">No messages yet. Send a message to start!</div>
+            </div>
+
+            <!-- Input area -->
+            <div class="chat-input-area">
+                <textarea id="messageInput" placeholder="Type a message (e.g., credentials, sensitive info)..."></textarea>
+                <button id="sendBtn" class="btn btn-send">Send (Plaintext)</button>
+            </div>
+            <div id="statusMessage" class="status-indicator">Polling active (2s interval)...</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

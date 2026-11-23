@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Database (keep schema, exclude local test runtime data)
+server/messenger.db
+server/messenger.db-journal
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/

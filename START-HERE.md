@@ -2,8 +2,9 @@
 
 ## 1. What this is (1 min)
 A cybersecurity lab: an **insecure** messenger (v1) and a **hardened end-to-end encrypted** one (v2) share the same server.
-Five automated attacks (MITM key swap, replay, tamper, DB dump, expired message) prove that v1 falls and v2 holds.
-We are upgrading it with accounts, persisted keys and a Telegram Mini App.
+Ten automated attacks (MITM key swap, replay, tamper, DB dump, expired message, unauthorized access, forged Telegram login,
+Telegram reading the chat, stolen sessions, script injection) prove that v1 falls and v2 holds.
+v2 has accounts, keys stored on the device, and runs inside Telegram as the CipherBridge Mini App.
 
 ## 2. Set up (4 min) from the repo root
 ```powershell
@@ -16,10 +17,10 @@ copy secrets\.env.example secrets\.env # fill only when you reach the Telegram s
 
 ## 3. Prove it works (2 min)
 ```powershell
-python attacks\run_all_attacks.py      # expect 5/5 PASS
-python -m uvicorn backend.app.main:app --port 8000 --reload
+python scripts\run_demo.py --no-telegram   # starts the server; leave it running
+python attacks\run_all_attacks.py          # in a second terminal: expect 10/10 PASS
 ```
-Open http://127.0.0.1:8000/v1/ and /v2/. Try the Alice/Bob walkthrough in `README.md`.
+Open http://127.0.0.1:8000/v1/ and /v2/. Try the Alice/Bob walkthrough in `README.md`. For the presentation follow `docs/DEMO.md`.
 
 ## 4. Find your work (2 min)
 - `plan/PROGRESS.md` shows where we are, `plan/TASKS.md` shows the next unticked step, and `prompts/NN-*.md` has the ready prompt for it.

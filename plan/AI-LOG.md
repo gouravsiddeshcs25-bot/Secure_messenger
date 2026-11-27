@@ -2,6 +2,17 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: docs and demo prep (Claude Code)
+- `scripts/run_demo.py`: starts server, `cloudflared --protocol http2` and the bot; reads the tunnel address and passes it
+  to the bot as MINIAPP_URL (env overrides .env), never reads or prints the token. Tested server-only mode and tunnel detection.
+- `scripts/demo_seed.py`: plaintext v1 messages (card, OTP) for the "v1 falls" part. v2 accounts are not seeded because
+  their keys must be made in the browser.
+- Docs: THREAT_MODEL rewritten (11 adversaries, each linked to a test; limits incl. no forward secrecy, tunnel transport),
+  new REPORT.md, DEMO.md (timed script + troubleshooting), VIVA.md (13 questions); README (threat table, tree, Windows and
+  bash quickstart, launcher, "what each attack proves", limits); START-HERE (10 attacks).
+- Corrected an old README claim that private keys are never in localStorage (they are, sealed under the password).
+- Dry run: fresh clone of `upgrades` + its own database on another port: 10/10 PASS with no extra files.
+
 ## 2026-11-27: feat: new attack tests (Claude Code)
 - `attacks/test_session_theft.py`: v1 reads an inbox with no session; v2 refuses a logged-out token, an expired one (expiry moved
   into the past in the SQLite file), a made-up one and the stored SHA-256 hash; checks the DB holds no raw token; dump endpoint 404.

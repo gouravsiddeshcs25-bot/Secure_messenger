@@ -23,6 +23,7 @@
   sensitive reveal/burn, key change blocks sending, accept and deliver again. No console errors.
 
 ## Last checkpoint
+- 2026-11-27 · `upgrades` · docs: report, demo script, viva answers; launcher. Suite 10/10 PASS (also from a clean clone).
 - 2026-11-27 · `upgrades` · feat: new attack tests (session reuse, XSS). Suite 10/10 PASS.
 - 2026-11-27 · `upgrades` · step 5 ticked after the phone check, phone layout fix. Suite 8/8 PASS.
 - 2026-11-27 · `upgrades` · feat: CipherBridge Telegram bot and Mini App. Suite 8/8 PASS (step 5 not ticked until tested in real Telegram).
@@ -30,9 +31,8 @@
 - 2026-11-27 · `upgrades` · feat: redesigned v2 client with persisted keys and key-change warning. Suite 6/6 PASS.
 
 ## Next step
-Presentation on 2026-11-28, run from the laptop (server + `cloudflared tunnel --protocol http2` + bot).
-Before it: one-command launcher, `docs/DEMO.md` (demo script), `docs/VIVA.md` (likely questions), demo seed users.
-After it: step 6 (more attack tests), 7 (report), 9 (public deployment).
+Presentation on 2026-11-28: `python scripts\run_demo.py`, then follow `docs/DEMO.md`. User still to do: one rehearsal,
+a screen recording as backup, print `docs/RESULTS.md`. After the presentation: step 9 (public deployment).
 
 ## Known issues
 - In-memory rate limiter resets on restart; behind cloudflared all users share one IP (per-username login limit still protects accounts).

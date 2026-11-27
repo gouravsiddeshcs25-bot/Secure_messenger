@@ -139,6 +139,24 @@ Planned: 9. Public deployment. 10. Email + forgot password with a recovery key.
 18. **Not audited; student project; v1 must be off in any public deployment.**
 Words never to use: "unbreakable", "100% secure", "military-grade", "forward secrecy".
 
+## 11b. Future plan (roadmap; nothing here is built yet)
+**Now (right after the presentation)**
+- Public deployment (step 9): always-on host (Render/Railway/Fly), https end to end, fixed address, real database with backups, bot in webhook mode, v1 and lab pages off. Removes: laptop + tunnel, new PIN after restart, http on localhost.
+- Email + forgot password (step 10): verified email, single-use 30-minute reset links stored as hashes, same answer for unknown accounts, all sessions signed out after reset. Removes: forgotten password = lost account.
+- Recovery key shown once at sign-up (like WhatsApp's 64-digit key) so a reset keeps keys and history.
+- Hardening: Content-Security-Policy, Subresource Integrity, rate limits in a database/Redis, real-browser XSS tests.
+
+**Next (make Telegram feel normal)**
+- One-tap "Open" button under every sealed Telegram message (server keeps the sealed text under a short code, still only ciphertext).
+- Seal into the same chat: `@bot` → Seal → message lands back in that chat (typed in the Mini App, never in Telegram's box).
+- Multi-device key transfer (e.g. QR code). Stronger PIN storage (longer PIN, secure hardware).
+
+**Later (research steps)**
+- Double Ratchet (forward secrecy) · sealed sender (hide sender metadata) · Android keyboard / browser extension to seal in any app ·
+  post-quantum hybrid ML-KEM + X25519 · invisible per-receiver watermarks to trace leaks (traces, doesn't prevent).
+
+Order rationale: a reliable public version first, then convenience, then research-level cryptography.
+
 ## 12. Demo (about 6 minutes)
 Setup: `python scripts\run_demo.py` (server + tunnel + bot) and `python scripts\demo_seed.py` (fake card/OTP in v1).
 1. Idea (home page). 2. v1 falls: open `/api/v1/messages/bob_v1demo` → card number and OTP with no login.

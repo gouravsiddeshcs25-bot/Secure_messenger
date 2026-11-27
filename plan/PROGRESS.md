@@ -2,25 +2,25 @@
 
 ## Current state
 - Branch: `upgrades`
-- Repo restructured into the team layout: `backend/app/` (was `server/`), `frontend/web/` (was `client_v2/`),
-  `frontend/legacy-insecure/` (was `client_v1/`), `frontend/shared/` (crypto.js, dlp.js, vendor/libsodium.js, served at `/shared/`).
-- The SQLite DB now lives in `backend/data/messenger.db` (git-ignored).
-- `.claude/` (settings, hooks, agents, commands, skills), `secrets/`, `plan/`, `contracts/` and `prompts/` were added.
-- Attack suite: **5/5 PASS** (`python attacks/run_all_attacks.py`).
+- Step 3 (A) done: Argon2id accounts, session tokens (SHA-256 hash stored, 24h), `require_user` on every v2 route,
+  ownership checks, rate limits (login 5/min per IP+username, register 30/min per IP), dump endpoint locked behind `LAB_MODE=1`.
+- v2 API at `/api/...`, insecure v1 API at `/api/v1/...` (v1 routes refuse v2 accounts so they aren't a back door).
+- v2 web client: register / log in / log out, token in memory only, no `innerHTML` left.
+- Attack suite: **6/6 PASS** (new: Unauthorized access).
 
 ## Last checkpoint
-- 2026-11-27 · `upgrades` · chore: team folder structure. Moves done with git mv, paths fixed, and the runner UTF-8 bug fixed.
-  Suite 5/5 PASS.
+- 2026-11-27 · `upgrades` · feat: argon2id login, sessions and access control. Suite 6/6 PASS. User tested register/login by hand.
 
 ## Next step
-Step 3: Argon2id login, session tokens, ownership checks, rate limiting, locked dump endpoint.
-Run `prompts/03-auth-sessions.md`.
+Frontend redesign together with step 4 (B): persisted keys, key-change warning, verify flow, honest wording.
+A static clickable preview (`frontend/web/preview.html`) is shown to the user for approval before the real wiring.
 
 ## Known issues
-- `frontend/web/app.js` uses `innerHTML` with sender/alert data (lines ~70, 398, 491, 504, 529), which is an XSS risk.
-  guard.mjs will block edits to that file until those lines are fixed (planned in step 4).
-- `/api/dump/messages` is open to anyone (locking it is planned in step 3).
-- No auth yet: any client can read or delete any user's messages (step 3).
+- In-memory rate limiter resets on restart; behind cloudflared all users share one IP (the per-username login limit still protects accounts).
+- Keys are regenerated on every login until step B.
+
+## Ideas / later
+- (none yet)
 
 ## Handoff
 (Filled by `/handoff`.)

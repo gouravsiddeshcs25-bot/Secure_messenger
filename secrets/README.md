@@ -10,6 +10,8 @@ Claude Code is denied Read/Edit access to this folder (see `.claude/settings.jso
    - `MINIAPP_URL`: the public HTTPS URL serving the Mini App (e.g. an ngrok/cloudflared tunnel to `/miniapp/`).
    - `SESSION_SECRET`: a long random value. Generate one with
      `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+   - `LAB_MODE`: leave empty normally. Set `LAB_MODE=1` only for a demo of the "database breach" view at
+     `/api/dump/messages` (it returns 404 otherwise). Remove it again after the demo.
 3. Restart the server. `backend/app/main.py` loads `secrets/.env` automatically if it exists.
 
 Share secrets with teammates over a private channel, never in git, chat logs, screenshots or AI prompts.

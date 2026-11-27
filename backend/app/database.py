@@ -53,7 +53,107 @@ def init_db():
                 FOREIGN KEY (recipient) REFERENCES users(username) ON DELETE CASCADE
             );
         """)
+        # Step A: accounts with passwords. Safe migration for an existing DB:
+        # add the column only if it is missing. v1 users keep NULL (they have no password).
+        columns = [row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "password_hash" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT NULL")
+        # Only the SHA-256 hash of a session token is stored, never the token itself.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+            );
+        """)
     conn.close()
+
+# ---------- Accounts and sessions (v2) ----------
+
+def create_account(username: str, password_hash: str) -> bool:
+    """Creates a v2 account. Returns False if the username is already taken."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def get_password_hash(username: str) -> Optional[str]:
+    conn = get_db_connection()
+    row = conn.execute("SELECT password_hash FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    return row["password_hash"] if row else None
+
+def is_v2_account(username: str) -> bool:
+    """True if this user has a password (a v2 account). v1 users have NULL."""
+    conn = get_db_connection()
+    row = conn.execute("SELECT 1 FROM users WHERE username = ? AND password_hash IS NOT NULL", (username,)).fetchone()
+    conn.close()
+    return row is not None
+
+def delete_v1_message(message_id: int) -> bool:
+    """v1 delete: anyone can delete, but only messages sent to v1 users (never a v2 account's messages)."""
+    conn = get_db_connection()
+    with conn:
+        cursor = conn.execute("""
+            DELETE FROM messages WHERE id = ? AND recipient IN
+                (SELECT username FROM users WHERE password_hash IS NULL)
+        """, (message_id,))
+        deleted = cursor.rowcount > 0
+    conn.close()
+    return deleted
+
+def user_exists(username: str) -> bool:
+    conn = get_db_connection()
+    row = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    return row is not None
+
+def store_session(token_hash: str, username: str, lifetime_seconds: int) -> str:
+    """Saves a session hash with an expiry and returns the expiry time."""
+    conn = get_db_connection()
+    with conn:
+        # Remove expired sessions while we are here.
+        conn.execute("DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')")
+        expires_at = conn.execute(
+            "SELECT datetime('now', ?) AS exp", (f"+{int(lifetime_seconds)} seconds",)
+        ).fetchone()["exp"]
+        conn.execute(
+            "INSERT INTO sessions (token_hash, username, expires_at) VALUES (?, ?, ?)",
+            (token_hash, username, expires_at),
+        )
+    conn.close()
+    return expires_at
+
+def get_session(token_hash: str) -> Optional[Dict[str, Any]]:
+    """Returns {token_hash, username} for a session that exists and has not expired."""
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT token_hash, username FROM sessions WHERE token_hash = ? AND datetime(expires_at) > datetime('now')",
+        (token_hash,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def delete_session(token_hash: str):
+    conn = get_db_connection()
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+    conn.close()
+
+def ttl_to_expiry(ttl_seconds: Optional[int]) -> Optional[str]:
+    """Turns a TTL into an SQLite timestamp. The value goes in as a ? parameter, never into the SQL text."""
+    if not ttl_seconds or ttl_seconds <= 0:
+        return None
+    conn = get_db_connection()
+    row = conn.execute("SELECT datetime('now', ?) AS exp", (f"+{int(ttl_seconds)} seconds",)).fetchone()
+    conn.close()
+    return row["exp"]
 
 def register_user(username: str) -> bool:
     conn = get_db_connection()
@@ -126,10 +226,14 @@ def get_messages_for_recipient(recipient: str) -> List[Dict[str, Any]]:
     conn.close()
     return [dict(row) for row in rows]
 
-def delete_message(message_id: int) -> bool:
+def delete_message(message_id: int, recipient: Optional[str] = None) -> bool:
+    """v2 passes recipient, so only the person the message was sent to can delete it. v1 passes None."""
     conn = get_db_connection()
     with conn:
-        cursor = conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        if recipient is None:
+            cursor = conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        else:
+            cursor = conn.execute("DELETE FROM messages WHERE id = ? AND recipient = ?", (message_id, recipient))
         deleted = cursor.rowcount > 0
     conn.close()
     return deleted

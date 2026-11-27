@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Cybersecurity Skill Lab Attack Runner.
-Executes all 5 attack vectors against Client v1 and Client v2,
+Executes all 6 attack vectors against Client v1 and Client v2,
 prints a comparison matrix, and saves results into docs/RESULTS.md.
 """
 
@@ -26,6 +26,7 @@ import test_replay_attack
 import test_tamper_ciphertext
 import test_database_dump
 import test_expired_message
+import test_unauthorized_access
 
 SERVER_URL = os.environ.get("SERVER_BASE", "http://127.0.0.1:8000")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +34,7 @@ RESULTS_PATH = os.path.join(REPO_ROOT, "docs", "RESULTS.md")
 
 def ensure_server_running():
     try:
-        r = requests.get(f"{SERVER_URL}/api/users", timeout=1)
+        r = requests.get(f"{SERVER_URL}/", timeout=1)
         if r.ok:
             return None
     except Exception:
@@ -49,7 +50,7 @@ def ensure_server_running():
     for _ in range(15):
         time.sleep(0.5)
         try:
-            r = requests.get(f"{SERVER_URL}/api/users", timeout=1)
+            r = requests.get(f"{SERVER_URL}/", timeout=1)
             if r.ok:
                 return proc
         except Exception:
@@ -67,7 +68,8 @@ def run_suite():
         test_replay_attack,
         test_tamper_ciphertext,
         test_database_dump,
-        test_expired_message
+        test_expired_message,
+        test_unauthorized_access
     ]
 
     results = []
@@ -133,7 +135,11 @@ def write_results_markdown(results):
 
         f.write("### Attack 5: Open Expired Message\n")
         f.write("- **Client v1 Result**: `still readable`. Messages persist forever in the database.\n")
-        f.write("- **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.\n")
+        f.write("- **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.\n\n")
+
+        f.write("### Attack 6: Unauthorized Access\n")
+        f.write("- **Client v1 Result**: `all succeed`. The v1 API (`/api/v1/...`) has no login, so Mallory can read Bob's inbox, send a message as Alice and delete Bob's messages.\n")
+        f.write("- **Client v2 Defense**: `blocked (401/403/404/429)`. Every v2 call needs a session token (Argon2id password login, token stored only as a SHA-256 hash, 24h expiry). The server takes the user from the token, so Mallory can't overwrite Bob's keys, read his inbox (403), send as Alice or delete his messages (404). Six wrong passwords in a minute get HTTP 429, and logout ends the session.\n")
 
     print(f"\n📄 Results successfully recorded to {RESULTS_PATH}")
 

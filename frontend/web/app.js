@@ -14,6 +14,9 @@
 
 let currentUser = null;
 let userPassphrase = null;
+// Session token from /api/login. Kept ONLY in this variable (not localStorage), so a page reload logs you out
+// and an injected script can't read it from storage later.
+let authToken = null;
 let myKeys = null;
 let currentPeer = null;
 let peerKeyCache = {}; // username -> { identityPubkey, exchangePubkey, keySignature, sharedSecret }
@@ -28,6 +31,8 @@ const chatSection = document.getElementById("chatSection");
 const usernameInput = document.getElementById("usernameInput");
 const userPassphraseInput = document.getElementById("userPassphraseInput");
 const loginBtn = document.getElementById("loginBtn");
+const registerBtn = document.getElementById("registerBtn");
+const logoutBtn = document.getElementById("logoutBtn");
 const cryptoInitStatus = document.getElementById("cryptoInitStatus");
 const currentUserDisplay = document.getElementById("currentUserDisplay");
 const recipientInput = document.getElementById("recipientInput");
@@ -67,7 +72,14 @@ function checkDLP() {
     const text = messageInput.value;
     const scanResult = DLP.scan(text);
     if (scanResult.detected) {
-        dlpReason.innerHTML = "<strong>" + scanResult.reasons.join("</strong>; <strong>") + "</strong>";
+        // Build the list with createElement/textContent (never innerHTML) so typed text can't inject HTML.
+        dlpReason.replaceChildren();
+        scanResult.reasons.forEach((reason, i) => {
+            if (i > 0) dlpReason.appendChild(document.createTextNode("; "));
+            const strong = document.createElement("strong");
+            strong.textContent = reason;
+            dlpReason.appendChild(strong);
+        });
         dlpWarning.style.display = "block";
         sensitiveToggle.checked = true; // Automatically enforce sensitive mode
         sensitiveToggle.disabled = true; // Prevent user from disabling sensitive mode
@@ -79,37 +91,75 @@ function checkDLP() {
     return scanResult;
 }
 
-// Login & Generate Keys
-loginBtn.addEventListener("click", async () => {
-    const username = usernameInput.value.trim().toLowerCase();
-    const passphrase = userPassphraseInput.value.trim();
+// Every v2 API call goes through here, so the session token is always attached.
+// If the server says 401 (token missing, wrong or expired), we drop back to the login screen.
+async function api(path, options = {}) {
+    const headers = Object.assign({}, options.headers || {});
+    if (options.body) headers["Content-Type"] = "application/json";
+    if (authToken) headers["Authorization"] = "Bearer " + authToken;
+    const resp = await fetch(path, Object.assign({}, options, { headers }));
+    if (resp.status === 401 && authToken) {
+        logoutLocal("Your session expired. Please log in again.");
+    }
+    return resp;
+}
 
-    if (!username) {
-        alert("Please enter a username.");
+async function readError(resp) {
+    try {
+        const data = await resp.json();
+        if (typeof data.detail === "string") return data.detail;
+        // 422 from the server: say exactly which field was wrong.
+        if (Array.isArray(data.detail) && data.detail.length) {
+            const field = (data.detail[0].loc || []).slice(-1)[0];
+            if (field === "password") return "Password must be 8 to 128 characters.";
+            if (field === "username") return "Username must be 1 to 50 characters: a-z, 0-9, _ or -.";
+        }
+    } catch (e) { /* not JSON */ }
+    return resp.status === 422 ? "Check the username (a-z, 0-9, _ or -) and password (8+ characters)." : resp.statusText;
+}
+
+// Register or log in, then generate keys and publish the public halves.
+async function authenticate(mode) {
+    const username = usernameInput.value.trim().toLowerCase();
+    const password = userPassphraseInput.value;
+
+    if (!username || !password) {
+        alert("Please enter a username and a password.");
+        return;
+    }
+    if (mode === "register" && password.length < 8) {
+        alert("Password must be at least 8 characters.");
         return;
     }
 
     try {
         await Crypto.init();
-        currentUser = username;
-        userPassphrase = passphrase || "default-local-passphrase";
 
-        // 1. Generate local cryptographic keypairs (Ed25519 + X25519)
+        // 1. Register (creates the account) or log in. The server answers with a session token.
+        const authResp = await api(mode === "register" ? "/api/register" : "/api/login", {
+            method: "POST",
+            body: JSON.stringify({ username, password })
+        });
+        if (!authResp.ok) {
+            throw new Error(await readError(authResp));
+        }
+        const session = await authResp.json();
+        if (!session.token) {
+            throw new Error("The server did not return a session token. Is it running the latest code? Restart it.");
+        }
+        authToken = session.token;
+        currentUser = session.username;
+        userPassphrase = password; // used only for the local "require passphrase" unlock check
+        userPassphraseInput.value = "";
+
+        // 2. Generate local cryptographic keypairs (Ed25519 + X25519).
+        //    (New keys on every login for now; keeping them between logins is step B.)
         myKeys = Crypto.generateUserKeys();
 
-        // 2. Register user handle on server
-        await fetch("/api/register", {
+        // 3. Publish public keys. The server saves them under the logged-in user (no username in the body).
+        const keyResp = await api("/api/keys", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: currentUser })
-        });
-
-        // 3. Register public keys on server (Server never sees private keys!)
-        const keyResp = await fetch("/api/keys", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                username: currentUser,
                 identity_pubkey: myKeys.identity.publicKeyB64,
                 exchange_pubkey: myKeys.exchange.publicKeyB64,
                 key_signature: myKeys.keySignatureB64
@@ -117,7 +167,7 @@ loginBtn.addEventListener("click", async () => {
         });
 
         if (!keyResp.ok) {
-            throw new Error("Failed to register public keys: " + keyResp.statusText);
+            throw new Error("Failed to register public keys: " + (await readError(keyResp)));
         }
 
         currentUserDisplay.textContent = currentUser;
@@ -126,8 +176,37 @@ loginBtn.addEventListener("click", async () => {
 
         startPolling();
     } catch (err) {
-        alert("Login initialization failed: " + err.message);
+        authToken = null;
+        alert((mode === "register" ? "Sign-up" : "Login") + " failed: " + err.message);
     }
+}
+
+loginBtn.addEventListener("click", () => authenticate("login"));
+registerBtn.addEventListener("click", () => authenticate("register"));
+
+// Clear everything held in memory and show the login screen.
+function logoutLocal(reason) {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    authToken = null;
+    currentUser = null;
+    userPassphrase = null;
+    myKeys = null;
+    currentPeer = null;
+    peerKeyCache = {};
+    lastSeenCounters = {};
+    myOutCounters = {};
+    processedMessageIds = new Set();
+    chatSection.style.display = "none";
+    loginSection.style.display = "block";
+    if (reason) alert(reason);
+}
+
+logoutBtn.addEventListener("click", async () => {
+    try {
+        await api("/api/logout", { method: "POST" }); // server deletes the session
+    } catch (e) { /* still log out locally */ }
+    logoutLocal();
 });
 
 // Connect to Peer & Perform Out-of-Band Key Exchange
@@ -146,7 +225,7 @@ connectPeerBtn.addEventListener("click", async () => {
 
 async function setupPeerConnection(peer) {
     try {
-        const resp = await fetch(`/api/keys/${peer}`);
+        const resp = await api(`/api/keys/${encodeURIComponent(peer)}`);
         if (!resp.ok) {
             throw new Error(`User '${peer}' has not registered public keys yet.`);
         }
@@ -263,12 +342,11 @@ sendBtn.addEventListener("click", async () => {
             signature: envelope.signatureB64
         });
 
-        // Transmit only ciphertext and public header to server
-        const resp = await fetch("/api/messages", {
+        // Transmit only ciphertext and public header to server.
+        // No "sender" field: the server takes the sender from our session token.
+        const resp = await api("/api/messages", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                sender: currentUser,
                 recipient: peer,
                 payload: wirePayload,
                 is_sensitive: isSensitive,
@@ -277,7 +355,7 @@ sendBtn.addEventListener("click", async () => {
         });
 
         if (!resp.ok) {
-            throw new Error("Server relay error: " + resp.statusText);
+            throw new Error("Server relay error: " + (await readError(resp)));
         }
 
         // Render outgoing message locally
@@ -299,7 +377,7 @@ function startPolling() {
 async function pollMessages() {
     if (!currentUser || !myKeys) return;
     try {
-        const resp = await fetch(`/api/messages/${currentUser}`);
+        const resp = await api(`/api/messages/${encodeURIComponent(currentUser)}`);
         if (!resp.ok) return;
 
         const data = await resp.json();
@@ -353,7 +431,7 @@ async function processIncomingMessage(msgRecord) {
             const ageSeconds = (Date.now() - header.timestamp) / 1000;
             if (ageSeconds > header.ttl_seconds) {
                 // Expired: Purge on server and notify
-                fetch(`/api/messages/${msgRecord.id}`, { method: "DELETE" }).catch(() => {});
+                api(`/api/messages/${msgRecord.id}`, { method: "DELETE" }).catch(() => {});
                 renderMessageBubble(sender, "⏱️ [Sensitive Message Expired: Key scrubbed, content unrecoverable]", "received", msgRecord.created_at, true);
                 return;
             }
@@ -395,19 +473,35 @@ function renderSensitiveCard(msgId, sender, envelope, messageKey, header) {
 
     const remainingSecs = Math.max(1, Math.round(header.ttl_seconds - (Date.now() - header.timestamp) / 1000));
 
-    bubble.innerHTML = `
-        <div class="sensitive-lock-header">
-            <span>🔒 Confidential Sensitive Message from <strong>${sender}</strong></span>
-            <span class="sensitive-countdown" id="cd-${msgId}">⏳ ${remainingSecs}s</span>
-        </div>
-        <p style="margin: 6px 0; font-size: 13px; color: #cbd5e1;">
-            Protected by per-message AEAD encryption. ${header.one_time_view ? "One-time view enabled." : ""}
-        </p>
-        <button class="btn btn-primary" id="unlock-btn-${msgId}" style="padding: 6px 14px; font-size: 13px; margin-top: 6px;">
-            Decrypt & View
-        </button>
-        <div id="content-${msgId}" style="display: none; margin-top: 10px; padding: 10px; background: #030712; border-radius: 6px;"></div>
-    `;
+    // Built with createElement/textContent: the sender name comes from the network and must not become HTML.
+    const lockHeader = document.createElement("div");
+    lockHeader.className = "sensitive-lock-header";
+    const title = document.createElement("span");
+    title.appendChild(document.createTextNode("🔒 Confidential Sensitive Message from "));
+    const senderStrong = document.createElement("strong");
+    senderStrong.textContent = sender;
+    title.appendChild(senderStrong);
+    const countdown = document.createElement("span");
+    countdown.className = "sensitive-countdown";
+    countdown.id = `cd-${msgId}`;
+    countdown.textContent = `⏳ ${remainingSecs}s`;
+    lockHeader.append(title, countdown);
+
+    const note = document.createElement("p");
+    note.style.cssText = "margin: 6px 0; font-size: 13px; color: #cbd5e1;";
+    note.textContent = "Protected by per-message AEAD encryption. " + (header.one_time_view ? "One-time view enabled." : "");
+
+    const unlockButton = document.createElement("button");
+    unlockButton.className = "btn btn-primary";
+    unlockButton.id = `unlock-btn-${msgId}`;
+    unlockButton.style.cssText = "padding: 6px 14px; font-size: 13px; margin-top: 6px;";
+    unlockButton.textContent = "Decrypt & View";
+
+    const contentDiv = document.createElement("div");
+    contentDiv.id = `content-${msgId}`;
+    contentDiv.style.cssText = "display: none; margin-top: 10px; padding: 10px; background: #030712; border-radius: 6px;";
+
+    bubble.append(lockHeader, note, unlockButton, contentDiv);
 
     messagesContainer.appendChild(bubble);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -448,7 +542,7 @@ function renderSensitiveCard(msgId, sender, envelope, messageKey, header) {
 
             // One-time view: immediately delete from server database
             if (header.one_time_view) {
-                fetch(`/api/messages/${msgId}`, { method: "DELETE" }).catch(() => {});
+                api(`/api/messages/${msgId}`, { method: "DELETE" }).catch(() => {});
             }
 
             unlockBtn.style.display = "none";
@@ -488,7 +582,10 @@ function renderSensitiveCard(msgId, sender, envelope, messageKey, header) {
 function burnSensitiveMessage(msgId, bubbleElem, messageKey, reason) {
     Crypto.scrub(messageKey); // Zero key memory
     if (bubbleElem) {
-        bubbleElem.innerHTML = `<span style="color: #94a3b8; font-style: italic;">🔥 [Sensitive message destroyed: ${reason}]</span>`;
+        const gone = document.createElement("span");
+        gone.style.cssText = "color: #94a3b8; font-style: italic;";
+        gone.textContent = `🔥 [Sensitive message destroyed: ${reason}]`;
+        bubbleElem.replaceChildren(gone);
     }
 }
 
@@ -501,7 +598,13 @@ function renderMessageBubble(sender, text, direction, timeStr, isSensitive, ttl)
 
     const meta = document.createElement("div");
     meta.className = "message-meta";
-    meta.innerHTML = `<span><strong>${sender}</strong></span><span>${timeStr}</span>`;
+    const senderSpan = document.createElement("span");
+    const senderName = document.createElement("strong");
+    senderName.textContent = sender;
+    senderSpan.appendChild(senderName);
+    const timeSpan = document.createElement("span");
+    timeSpan.textContent = timeStr;
+    meta.append(senderSpan, timeSpan);
 
     if (isSensitive) {
         const tag = document.createElement("span");
@@ -526,7 +629,9 @@ function renderSecurityAlert(sender, alertText) {
     bubble.style.borderColor = "#ef4444";
     bubble.style.background = "#450a0a";
     bubble.style.color = "#fca5a5";
-    bubble.innerHTML = `<strong>Security Guard:</strong> ${alertText}`;
+    const label = document.createElement("strong");
+    label.textContent = "Security Guard:";
+    bubble.append(label, document.createTextNode(" " + alertText));
     messagesContainer.appendChild(bubble);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }

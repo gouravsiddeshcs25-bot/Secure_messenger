@@ -16,14 +16,15 @@
 
         <!-- Login / User Selection -->
         <div class="card login-card" id="loginSection">
-            <h3>Identity & Keypair Setup</h3>
+            <h3>Sign up or log in</h3>
             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                Logging in generates local cryptographic identity (Ed25519) and key exchange (X25519) pairs. Private keys never leave this browser.
+                Your password is checked by the server (stored only as an Argon2id hash). After login, this browser generates your identity (Ed25519) and key exchange (X25519) keys. Private keys never leave this browser.
             </p>
             <div class="input-row">
-                <input type="text" id="usernameInput" placeholder="Enter username (e.g., alice, bob)" />
-                <input type="password" id="userPassphraseInput" placeholder="Local session passphrase (for unlocking)" />
-                <button id="loginBtn" class="btn btn-primary">Generate Keys & Login</button>
+                <input type="text" id="usernameInput" placeholder="Username (a-z, 0-9, _ or -)" autocomplete="username" />
+                <input type="password" id="userPassphraseInput" placeholder="Password (8+ characters)" autocomplete="current-password" />
+                <button id="loginBtn" class="btn btn-primary">Log in</button>
+                <button id="registerBtn" class="btn btn-primary">Register</button>
             </div>
             <div id="cryptoInitStatus" style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
                 Initializing local libsodium crypto module...
@@ -35,6 +36,7 @@
             <div class="chat-header">
                 <div>
                     Logged in as: <strong id="currentUserDisplay" class="highlight-user"></strong>
+                    <button id="logoutBtn" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px; margin-left: 8px;">Log out</button>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label for="recipientInput">Recipient:</label>

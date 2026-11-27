@@ -2,6 +2,17 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: feat: argon2id login, sessions and access control (Claude Code)
+- **Did:** new `backend/app/auth.py` (Argon2id via PyNaCl, dummy-hash timing equaliser, token_urlsafe sessions stored as SHA-256,
+  `require_user`, in-memory rate limiter). `database.py`: `password_hash` column migration, `sessions` table, TTL now a `?` parameter.
+  `routes.py`: v2 routes authenticated, sender/key owner from the session, 403/404 ownership checks, dump behind `LAB_MODE=1`,
+  v1 moved to `/api/v1` and blocked from touching v2 accounts. v2 client: register/login/logout, Bearer token in memory,
+  all `innerHTML` replaced. v1 client: URL paths only. Attacks: client_sim uses tokens and reads the DB file for the breach
+  simulation; new `test_unauthorized_access.py`. Contract, examples, `.env.example`, `docs/API-NOTES.md` updated.
+- **Verified:** suite 6/6 PASS on a fresh server and on the user's restarted server. The new test failed against the old server.
+  `/api/dump/messages` -> 404, `/api/users` without token -> 401, short password -> 422.
+- **Human check:** the user registered and logged in two accounts in `/v2/` and confirmed it works.
+
 ## 2026-11-27: chore: team folder structure (Claude Code)
 - **Did:** used `git mv` to move `server/` to `backend/app/` (`app.py` became `main.py`), `client_v2/` to `frontend/web/`,
   `client_v1/` to `frontend/legacy-insecure/`, and crypto.js, dlp.js and vendor/libsodium.js to `frontend/shared/`.

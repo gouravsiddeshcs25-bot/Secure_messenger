@@ -8,6 +8,7 @@ Mallory intercepts the key exchange and substitutes her own public key,
 attempting to decrypt Alice's messages silently.
 """
 
+import uuid
 from client_sim import ClientV1, ClientV2, run_crypto_helper
 
 def test_v1_mitm():
@@ -34,10 +35,12 @@ def test_v1_mitm():
 
 def test_v2_mitm():
     """Client v2 detects key swaps via Ed25519 signatures and out-of-band fingerprints."""
-    alice = ClientV2("alice_mitm_v2")
+    # Unique names: v2 accounts have passwords, so the same name can't be registered twice.
+    uid = uuid.uuid4().hex[:6]
+    alice = ClientV2(f"alice_mitm_v2_{uid}")
     alice.register()
     
-    bob = ClientV2("bob_mitm_v2")
+    bob = ClientV2(f"bob_mitm_v2_{uid}")
     bob.register()
     
     # Mallory generates rogue keys

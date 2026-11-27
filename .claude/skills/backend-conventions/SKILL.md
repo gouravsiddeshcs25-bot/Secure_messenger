@@ -21,9 +21,9 @@ description: Conventions for backend/ (FastAPI + SQLite) in Secure Messenger. Us
 6. Auth (step 3): Argon2id hashes, `secrets.token_urlsafe(32)` session tokens, `hmac.compare_digest`,
    an expiry, and an ownership check on every `/messages` and `/keys` write or read. Errors are 401/403/404 without leaking
    whether a user exists. Rate limits on register, login and send return 429.
-7. `/api/dump/messages` is a lab-only endpoint. Keep it disabled unless `LAB_DUMP_ENABLED=1`. The dump attack
-   test must set that flag explicitly.
-8. v1 compatibility: v1 must keep working against the API unauthenticated, because its insecurity is the point. Gate
-   new auth on the v2 path with a mode or header, and document it in contracts/API.md.
+7. `/api/dump/messages` is a lab-only endpoint. Keep it disabled (404) unless `LAB_MODE=1`. The attack tests
+   simulate a breach by reading the SQLite file read-only (`read_db_messages()` in `attacks/client_sim.py`).
+8. v1 compatibility: v1 has its own open router at `/api/v1/...` (no auth, on purpose). v2 is at `/api/...` and every
+   route except register/login uses `Depends(require_user)`. v1 routes refuse v2 accounts so they are not a back door.
 9. New dependencies get a pinned version in `backend/requirements.txt`.
 10. After every change, `python attacks/run_all_attacks.py` must pass.

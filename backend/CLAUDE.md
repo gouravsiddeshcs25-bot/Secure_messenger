@@ -12,7 +12,8 @@ Read the root `CLAUDE.md` first. Detailed conventions are in `.claude/skills/bac
 - Every API change goes to `contracts/API.md` first. Tell the frontend owner.
 - Auth (step 3): Argon2id, `secrets.token_urlsafe` sessions with expiry, `hmac.compare_digest`, ownership checks, 429 rate limits.
   v1's unauthenticated path must keep working, because v1 stays insecure on purpose.
-- `/api/dump/messages` is lab-only. Lock it behind `LAB_DUMP_ENABLED=1` (step 3).
+- `/api/dump/messages` is lab-only and returns 404 unless `LAB_MODE=1`. The attack tests read the SQLite file directly instead.
+- v2 lives at `/api/...` (login required, `require_user` from `auth.py`). v1 lives at `/api/v1/...` (open on purpose, but it can't touch v2 accounts).
 - Telegram (step 5): `backend/bot/` plus server-side initData HMAC check. Follow the `telegram-miniapp` skill.
 - Pin new dependencies in `backend/requirements.txt`.
 - After each change, run `python attacks\run_all_attacks.py` and make sure every row passes.

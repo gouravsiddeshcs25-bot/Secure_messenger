@@ -33,7 +33,8 @@ app = FastAPI(
 database.init_db()
 
 # Mount API routes
-app.include_router(routes.router)
+app.include_router(routes.router)      # /api     : secure v2 (login required)
+app.include_router(routes.v1_router)   # /api/v1  : insecure v1 (attack-lab target)
 
 # Resolve client directories
 CLIENT_V1_DIR = os.path.join(REPO_ROOT, "frontend", "legacy-insecure")

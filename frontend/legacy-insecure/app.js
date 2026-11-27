@@ -31,7 +31,7 @@ loginBtn.addEventListener("click", async () => {
     }
 
     try {
-        const resp = await fetch("/api/register", {
+        const resp = await fetch("/api/v1/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username })
@@ -73,7 +73,7 @@ sendBtn.addEventListener("click", async () => {
     });
 
     try {
-        const resp = await fetch("/api/messages", {
+        const resp = await fetch("/api/v1/messages", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -105,7 +105,7 @@ function startPolling() {
 async function fetchMessages() {
     if (!currentUser) return;
     try {
-        const resp = await fetch(`/api/messages/${currentUser}`);
+        const resp = await fetch(`/api/v1/messages/${currentUser}`);
         if (!resp.ok) return;
 
         const data = await resp.json();

@@ -11,6 +11,7 @@ This report records the automated attack tests executed against **Client v1** (N
 | Tamper with ciphertext | altered text shown | altered text shown | auth tag fails | auth tag fails | **✅ PASS** |
 | Dump server database | plaintext readable | plaintext readable | only ciphertext | only ciphertext | **✅ PASS** |
 | Open expired message | still readable | still readable | key gone, undecryptable | key gone, undecryptable | **✅ PASS** |
+| Unauthorized access | all succeed | all succeed | blocked (401/403/404/429) | blocked (401/403/404/429) | **✅ PASS** |
 
 ---
 
@@ -35,3 +36,7 @@ This report records the automated attack tests executed against **Client v1** (N
 ### Attack 5: Open Expired Message
 - **Client v1 Result**: `still readable`. Messages persist forever in the database.
 - **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.
+
+### Attack 6: Unauthorized Access
+- **Client v1 Result**: `all succeed`. The v1 API (`/api/v1/...`) has no login, so Mallory can read Bob's inbox, send a message as Alice and delete Bob's messages.
+- **Client v2 Defense**: `blocked (401/403/404/429)`. Every v2 call needs a session token (Argon2id password login, token stored only as a SHA-256 hash, 24h expiry). The server takes the user from the token, so Mallory can't overwrite Bob's keys, read his inbox (403), send as Alice or delete his messages (404). Six wrong passwords in a minute get HTTP 429, and logout ends the session.

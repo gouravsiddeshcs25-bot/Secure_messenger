@@ -11,7 +11,7 @@ and attempts to read all past messages.
 import uuid
 import requests
 import json
-from client_sim import ClientV1, ClientV2, SERVER_BASE
+from client_sim import ClientV1, ClientV2, SERVER_BASE, read_db_messages
 
 def test_v1_dump():
     """Client v1 stores messages in plaintext: server breach reveals all data."""
@@ -27,9 +27,8 @@ def test_v1_dump():
     secret_text = f"HR_CONFIDENTIAL_SALARY_ALICE=$150,000_{uid}"
     alice.send_message(bob_name, secret_text)
     
-    # Adversary performs full database dump
-    resp = requests.get(f"{SERVER_BASE}/api/dump/messages")
-    stored_messages = resp.json()["stored_messages"]
+    # Adversary steals a full copy of the server database
+    stored_messages = read_db_messages()
     
     # Check if secret text is readable in the dump
     plaintext_found = any(secret_text in m["payload"] for m in stored_messages)
@@ -56,9 +55,8 @@ def test_v2_dump():
     secret_text = f"FINANCE_CONFIDENTIAL_REVENUE_Q4=$12,500,000_{uid}"
     msg_id = alice.send_message(bob_name, secret_text)
     
-    # Adversary performs full database dump
-    resp = requests.get(f"{SERVER_BASE}/api/dump/messages")
-    stored_messages = resp.json()["stored_messages"]
+    # Adversary steals a full copy of the server database
+    stored_messages = read_db_messages()
     
     # Locate Alice's message in the dump
     alice_row = [m for m in stored_messages if m["id"] == msg_id][-1]

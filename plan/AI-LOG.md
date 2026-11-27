@@ -2,6 +2,14 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: step 5 checked on a real phone, phone layout fix (Claude Code)
+- **User check:** bot created with BotFather (inline mode on), tunnel via `cloudflared --protocol http2` (QUIC blocked on their
+  network), Mini App opened in Telegram, safety numbers matched between the Mini App and the web app, a sealed message sent through
+  WhatsApp opened in the web app as the other user. Step 5 ticked.
+- **Fix:** auto-sized grid tracks grew to the textarea width and pushed Send / the trust chip off phone screens. Tracks pinned to the
+  screen width, long words wrap, compact composer and dialogs under 480px. Checked with Playwright at 320/360/412 px; desktop test 8/8.
+- **Plan:** added step 9 (public deployment) and the smoother-Telegram ideas to PROGRESS "Ideas / later".
+
 ## 2026-11-27: feat: CipherBridge Telegram bot and Mini App (Claude Code)
 - **Checked first:** the initData rules on core.telegram.org/bots/webapps (secret key = HMAC-SHA256 of the bot token keyed with
   "WebAppData"; every field except `hash`, sorted, `key=value`, joined with newlines; `signature` stays in) and the

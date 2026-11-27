@@ -209,3 +209,35 @@ a.brand { color: var(--ink); text-decoration: none; }
     .shell.chat-open .convo { transform: none; }
     .convo-main, .empty-convo { height: 100%; }
 }
+
+/* ================= Phones (also the Telegram Mini App) =================
+   A grid track sized "auto" grows to fit its widest child (the textarea, a long word), which pushed the
+   Send button and the trust chip off the right edge. Pin every track to the screen width instead. */
+.convo-main { grid-template-columns: minmax(0, 1fr); }
+.convo, .thread, .composer, .compose-row, .compose-box, .convo-head .who { min-width: 0; }
+.compose-box textarea { min-width: 0; width: 100%; }
+.bubble { overflow-wrap: anywhere; }
+.convo-head .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip, .seal-btn, .send-btn, .toggle-sensitive { flex: none; white-space: nowrap; }
+.dialog-body { grid-template-columns: minmax(0, 1fr); }
+.dialog-body h2, .dialog-body p { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .convo-head { padding: 10px 12px; gap: 10px; }
+    .compose-box textarea { font-size: 16px; } /* below 16px, phone browsers zoom in on focus */
+}
+@media (max-width: 480px) {
+    .toggle-sensitive { width: 34px; padding: 0; justify-content: center; }
+    .toggle-sensitive .label { display: none; }
+    .compose-row { gap: 6px; }
+    .seal-btn, .send-btn { width: 40px; height: 40px; }
+    .convo-head .avatar { display: none; }
+    .msg { max-width: 88%; }
+    .options { gap: 8px 12px; }
+    .dialog-body { padding: 20px 18px; }
+    .dialog-actions { padding: 0 18px 20px; flex-wrap: wrap; }
+    .safety { font-size: 19px; gap: 8px 10px; padding: 14px 10px; }
+    .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .facts dd { margin-bottom: 8px; overflow-wrap: anywhere; }
+}
+

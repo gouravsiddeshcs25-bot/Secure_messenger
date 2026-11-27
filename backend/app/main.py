@@ -9,6 +9,18 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+# Repo root: backend/app/main.py -> three levels up
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load secrets/.env if present (never committed; see secrets/README.md)
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(REPO_ROOT, "secrets", ".env")
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+except ImportError:
+    pass
+
 from . import database, routes
 
 app = FastAPI(
@@ -24,17 +36,19 @@ database.init_db()
 app.include_router(routes.router)
 
 # Resolve client directories
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLIENT_V1_DIR = os.path.join(BASE_DIR, "client_v1")
-CLIENT_V2_DIR = os.path.join(BASE_DIR, "client_v2")
+CLIENT_V1_DIR = os.path.join(REPO_ROOT, "frontend", "legacy-insecure")
+CLIENT_V2_DIR = os.path.join(REPO_ROOT, "frontend", "web")
+SHARED_DIR = os.path.join(REPO_ROOT, "frontend", "shared")
 
 # Ensure directories exist
 os.makedirs(CLIENT_V1_DIR, exist_ok=True)
 os.makedirs(CLIENT_V2_DIR, exist_ok=True)
+os.makedirs(SHARED_DIR, exist_ok=True)
 
 # Mount static files
 app.mount("/v1", StaticFiles(directory=CLIENT_V1_DIR, html=True), name="client_v1")
 app.mount("/v2", StaticFiles(directory=CLIENT_V2_DIR, html=True), name="client_v2")
+app.mount("/shared", StaticFiles(directory=SHARED_DIR), name="shared")
 
 @app.get("/", response_class=HTMLResponse)
 def index():

@@ -11,6 +11,13 @@ import time
 import subprocess
 import requests
 
+# Windows consoles default to cp1252, which cannot print the emoji in the report
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Ensure attacks directory is in sys.path
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -21,7 +28,8 @@ import test_database_dump
 import test_expired_message
 
 SERVER_URL = os.environ.get("SERVER_BASE", "http://127.0.0.1:8000")
-RESULTS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "RESULTS.md")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_PATH = os.path.join(REPO_ROOT, "docs", "RESULTS.md")
 
 def ensure_server_running():
     try:
@@ -33,7 +41,8 @@ def ensure_server_running():
     
     print("Starting background server for attack suite...")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "server.app:app", "--host", "127.0.0.1", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "backend.app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+        cwd=REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
@@ -94,7 +103,7 @@ def run_suite():
 
 def write_results_markdown(results):
     os.makedirs(os.path.dirname(RESULTS_PATH), exist_ok=True)
-    with open(RESULTS_PATH, "w") as f:
+    with open(RESULTS_PATH, "w", encoding="utf-8") as f:
         f.write("# Cybersecurity Skill Lab Attack Verification Results\n\n")
         f.write("This report records the automated attack tests executed against **Client v1** (Naive Insecure) and **Client v2** (Hardened Zero-Knowledge E2EE).\n\n")
         f.write("## 1. Attack Verification Matrix\n\n")

@@ -1,0 +1,27 @@
+---
+name: frontend-conventions
+description: Conventions for frontend/ in Secure Messenger, covering the v2 web client, shared crypto/DLP, the legacy insecure v1 and the Telegram Mini App. Use before editing any HTML/JS/CSS under frontend/.
+---
+# Frontend conventions
+
+## Layout and URLs (URLs must not change)
+| Folder | URL | What |
+|---|---|---|
+| `frontend/legacy-insecure/` | `/v1/` | Client v1. **Deliberately insecure.** Don't fix it. |
+| `frontend/web/` | `/v2/` | Client v2, hardened E2EE UI |
+| `frontend/shared/` | `/shared/` | `crypto.js`, `dlp.js`, `vendor/libsodium.js`, used by v2, the Mini App and the attack suite |
+| `frontend/telegram-miniapp/` | (step 5) | Telegram Mini App, reusing `/shared/` |
+
+## Rules
+1. Plain browser JS with no build step and no CDN. libsodium is the local bundle in `frontend/shared/vendor/`.
+2. Load shared code with absolute paths: `<script src="/shared/vendor/libsodium.js">`, then `/shared/crypto.js`, then `/shared/dlp.js`,
+   then the page's own `app.js`. The order matters.
+3. **No `innerHTML` with dynamic data** in v2 or the Mini App. Use `textContent` and `createElement`. guard.mjs blocks it.
+   (The current `frontend/web/app.js` has several of these. Removing them is part of step 4.)
+4. Crypto only through `frontend/shared/crypto.js`. If you change its API, `attacks/crypto_helper.js` must still work.
+   Run the suite.
+5. DLP patterns live in `frontend/shared/dlp.js`. Test strings must be obviously fake and must not match guard's real-token patterns.
+6. Honest UI text: no "unbreakable", "military-grade" or "100% secure". The green "verified" tick only shows after manual
+   fingerprint confirmation.
+7. Calls to the API follow `contracts/API.md`. If you need a new field, change the contract first and tell the backend owner.
+8. v1 changes are only allowed to keep it running (path fixes). Never add security to v1.

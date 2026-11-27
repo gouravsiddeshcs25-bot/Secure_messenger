@@ -8,8 +8,8 @@ global.self = global.window;
 global.crypto = require('crypto').webcrypto;
 window.crypto = global.crypto;
 
-require('../client_v2/vendor/libsodium.js');
-require('../client_v2/crypto.js');
+require('../frontend/shared/vendor/libsodium.js');
+require('../frontend/shared/crypto.js');
 
 const Crypto = window.Crypto;
 

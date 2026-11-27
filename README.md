@@ -33,7 +33,7 @@ Most modern messaging applications protect data in transit (via TLS) and end-to-
 ---
 
 ## 🥋 Threat Model & Security Design
-Detailed specifications are documented in [docs/THREAT_MODEL.md](file:///Users/gourav/Desktop/secure_messenger/docs/THREAT_MODEL.md).
+Detailed specifications are documented in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 | Adversary | Adversary Capability | Defense in v2 |
 | :--- | :--- | :--- |
@@ -45,9 +45,9 @@ Detailed specifications are documented in [docs/THREAT_MODEL.md](file:///Users/g
 ---
 
 ## 🔐 Cryptographic Architecture
-Detailed cryptographic formulas and packet diagrams are in [docs/PROTOCOL.md](file:///Users/gourav/Desktop/secure_messenger/docs/PROTOCOL.md).
+Detailed cryptographic formulas and packet diagrams are in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-All cryptographic primitives are provided client-side by **libsodium** (`libsodium-wrappers-sumo` bundled locally in `client_v2/vendor/libsodium.js` without any external CDN dependencies):
+All cryptographic primitives are provided client-side by **libsodium** (`libsodium-wrappers-sumo` bundled locally in `frontend/shared/vendor/libsodium.js` without any external CDN dependencies):
 - **Identity & Signatures**: `Ed25519` (`crypto_sign`)
 - **Key Exchange**: `X25519` Diffie-Hellman (`crypto_scalarmult`)
 - **Per-Message Key Ratchet (Forward Secrecy)**: `BLAKE2b`-based KDF (`crypto_kdf_derive_from_key`)
@@ -73,23 +73,29 @@ secure_messenger/
 │   ├── THREAT_MODEL.md         # Adversaries, boundaries, and security choices
 │   ├── PROTOCOL.md             # Cryptographic handshake, KDF ratchet, and wire specs
 │   └── RESULTS.md              # Attack lab verification results matrix
-├── server/
-│   ├── app.py                  # FastAPI application & static routing
-│   ├── database.py             # SQLite schemas and lifecycle operations
-│   ├── routes.py               # REST API endpoints
-│   └── messenger.db            # SQLite database file
-├── client_v1/                  # Deliberately Insecure Client (The Attack Target)
-│   ├── index.html              # Plaintext chat UI
-│   ├── app.js                  # Vulnerable client logic (no E2EE, no replay check)
-│   └── style.css
-├── client_v2/                  # Hardened Zero-Knowledge Client
-│   ├── vendor/
-│   │   └── libsodium.js        # Local libsodium bundle (no CDN dependency)
-│   ├── crypto.js               # Client-side libsodium wrapper & primitives
-│   ├── dlp.js                  # Client-side Data Loss Prevention engine
-│   ├── app.js                  # Secure state machine & ephemeral messaging UI
-│   ├── index.html
-│   └── style.css
+├── backend/
+│   ├── CLAUDE.md               # Backend-only rules
+│   ├── requirements.txt        # Python dependencies
+│   ├── app/
+│   │   ├── main.py             # FastAPI application & static routing (/v1, /v2, /shared)
+│   │   ├── database.py         # SQLite schemas and lifecycle operations
+│   │   └── routes.py           # REST API endpoints
+│   └── data/                   # git-ignored; holds messenger.db
+├── frontend/
+│   ├── CLAUDE.md               # Frontend-only rules
+│   ├── shared/                 # Served at /shared/
+│   │   ├── vendor/
+│   │   │   └── libsodium.js    # Local libsodium bundle (no CDN dependency)
+│   │   ├── crypto.js           # Client-side libsodium wrapper & primitives
+│   │   └── dlp.js              # Client-side Data Loss Prevention engine
+│   ├── legacy-insecure/        # Client v1: Deliberately Insecure (The Attack Target), served at /v1/
+│   │   ├── index.html          # Plaintext chat UI
+│   │   ├── app.js              # Vulnerable client logic (no E2EE, no replay check)
+│   │   └── style.css
+│   └── web/                    # Client v2: Hardened Zero-Knowledge Client, served at /v2/
+│       ├── app.js              # Secure state machine & ephemeral messaging UI
+│       ├── index.html
+│       └── style.css
 ├── attacks/                    # Automated Attack Scripts
 │   ├── client_sim.py           # Headless Python client framework
 │   ├── crypto_helper.js        # Node bridge to local libsodium crypto module
@@ -99,6 +105,13 @@ secure_messenger/
 │   ├── test_database_dump.py   # SQL database exfiltration attack
 │   ├── test_expired_message.py # Expiration & memory scrub attack
 │   └── run_all_attacks.py      # Unified runner outputting PASS/FAIL table
+├── contracts/                  # API.md + examples: the frontend/backend handshake
+├── plan/                       # PLAN, TASKS, PROGRESS, DECISIONS, LESSONS, AI-LOG
+├── prompts/                    # One ready prompt per step in plan/TASKS.md
+├── scripts/                    # check.ps1 / check.sh
+├── secrets/                    # git-ignored except .env.example and README.md
+├── .claude/                    # Claude Code settings, agents, commands, skills, hooks
+├── CLAUDE.md · AGENTS.md · START-HERE.md
 └── README.md
 ```
 
@@ -112,12 +125,13 @@ secure_messenger/
 
 ### 2. Install Dependencies
 ```bash
-python3 -m pip install fastapi uvicorn requests pynacl cryptography
+python -m pip install -r backend/requirements.txt
 ```
 
 ### 3. Start the Server
 ```bash
-python3 -m uvicorn server.app:app --host 127.0.0.1 --port 8000 --reload
+# run from the repo root
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ---
@@ -143,7 +157,7 @@ Open your browser to:
 
 ## 🔍 Data Loss Prevention (DLP) Subsystem
 
-Client v2 includes a pre-transmission Data Loss Prevention (DLP) engine in [client_v2/dlp.js](file:///Users/gourav/Desktop/secure_messenger/client_v2/dlp.js):
+Client v2 includes a pre-transmission Data Loss Prevention (DLP) engine in [frontend/shared/dlp.js](frontend/shared/dlp.js):
 - **Aadhaar-like 12-digit IDs**: Matches `XXXX XXXX XXXX` or contiguous digits starting with `[2-9]`.
 - **Credit Card Numbers**: Scans 13–19 digit card numbers and validates them with the **Luhn algorithm (Mod 10)**. Fake numbers or order IDs failing Luhn are ignored.
 - **API Keys & Credentials**: Detects AWS Access Keys (`AKIA...`), GitHub Tokens (`ghp_...`), OpenAI keys (`sk-...`), Slack tokens (`xox...`), private key headers, and password assignments.
@@ -160,7 +174,7 @@ The attack lab executes the identical attack vectors against both **Client v1** 
 
 ### Run the Entire Attack Suite
 ```bash
-python3 attacks/run_all_attacks.py
+python attacks/run_all_attacks.py
 ```
 
 ### Verification Matrix Output
@@ -175,7 +189,7 @@ Dump server database       | plaintext readable | plaintext readable | only ciph
 Open expired message       | still readable     | still readable     | key gone, undecryptable      | key gone, undecryptable      | ✅ PASS
 ----------------------------------------------------------------------------------------
 ```
-Detailed technical explanations are preserved in [docs/RESULTS.md](file:///Users/gourav/Desktop/secure_messenger/docs/RESULTS.md).
+Detailed technical explanations are preserved in [docs/RESULTS.md](docs/RESULTS.md).
 
 ---
 

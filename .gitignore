@@ -8,9 +8,24 @@ env/
 venv/
 .venv/
 
-# Database (keep schema, exclude local test runtime data)
-server/messenger.db
-server/messenger.db-journal
+# Database (runtime data lives in backend/data/)
+*.db
+*.db-journal
+backend/data/*
+!backend/data/.gitkeep
+
+# Secrets: only the template and README are committed
+secrets/*
+!secrets/.env.example
+!secrets/README.md
+.env
+.env.*
+!.env.example
+
+# Logs, node, local Claude settings
+*.log
+node_modules/
+.claude/settings.local.json
 
 # IDE / OS
 .DS_Store

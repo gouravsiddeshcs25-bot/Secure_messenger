@@ -9,7 +9,9 @@ import sqlite3
 import os
 from typing import Optional, List, Dict, Any
 
-DB_PATH = os.environ.get("MESSENGER_DB_PATH", os.path.join(os.path.dirname(__file__), "messenger.db"))
+_DEFAULT_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "messenger.db")
+DB_PATH = os.environ.get("MESSENGER_DB_PATH", _DEFAULT_DB)
+os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 
 def get_db_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)

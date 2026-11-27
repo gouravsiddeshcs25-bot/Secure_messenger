@@ -12,3 +12,4 @@ Each step has a ready prompt in `prompts/`.
 - [x] 7. Docs and report (`prompts/07-docs-report.md`)
 - [ ] 8. Demo prep (`prompts/08-demo-prep.md`): launcher, seed, DEMO.md, VIVA.md and clean-clone dry run done; left: the user's screen recording + printed RESULTS.md
 - [ ] 9. Public deployment: v2 + Mini App + bot online for anyone (after 6-8). v1 and lab endpoints off in public; real database with backups; bot in webhook mode; hosting choice TBD (Render/Railway/Fly vs Vercel + hosted Postgres)
+- [ ] 10. Email + forgot password: verified email at sign-up, single-use hashed reset links (30 min), same answer for unknown accounts, all sessions ended on reset, optional recovery key so a reset keeps keys/history; attack tests for token guessing/reuse/expiry/enumeration (after the presentation, with step 9)

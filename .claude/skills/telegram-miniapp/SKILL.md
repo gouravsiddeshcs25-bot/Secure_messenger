@@ -8,8 +8,9 @@ description: How to build the Telegram bot and Mini App for Secure Messenger saf
 - `backend/bot/`: a minimal bot. `/start` replies with a WebApp button that opens `MINIAPP_URL`.
 - `frontend/telegram-miniapp/`: `index.html` loads `https://telegram.org/js/telegram-web-app.js` (the official
   script; the only allowed external script), then `/shared/vendor/libsodium.js`, `/shared/crypto.js` and its own `app.js`.
-- The backend mounts it at `/miniapp/` (add the mount to `backend/app/main.py`).
-- `POST /api/telegram/auth` takes `{ "init_data": "<raw Telegram.WebApp.initData>" }` and returns a session token.
+- The backend mounts it at `/tg/`. `index.html` is GENERATED from `frontend/web/index.html` by `scripts/build_miniapp.py`
+  (only the sign-in block, `auth.html`, differs). The Mini App is the v2 client: it imports `/v2/js/*.js`.
+- `POST /api/tg/auth` takes `{ "init_data": "<raw Telegram.WebApp.initData>" }` and returns a session token.
   Write it in `contracts/API.md` first.
 
 ## initData validation (server side, mandatory)
@@ -28,7 +29,7 @@ Confirm the details against core.telegram.org/bots/webapps before implementing (
 If it leaks, follow `secrets/README.md` (BotFather `/revoke`).
 
 ## Local dev
-The Mini App needs HTTPS. Run a tunnel (cloudflared/ngrok) to port 8000 and set `MINIAPP_URL=https://<tunnel>/miniapp/`.
+The Mini App needs HTTPS. Run a tunnel (cloudflared/ngrok) to port 8000 and set `MINIAPP_URL=https://<tunnel>/tg/`.
 
 ## Security notes for docs
 Bot chats are not E2EE. Message content goes only through our E2EE API, never through the bot.

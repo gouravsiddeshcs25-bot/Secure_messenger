@@ -5,10 +5,10 @@ Read the root `CLAUDE.md` first. Detailed conventions are in `.claude/skills/fro
 | Folder | URL | Rule |
 |---|---|---|
 | `legacy-insecure/` | `/v1/` | Client v1. **Deliberately insecure. Only path fixes are allowed; never add security.** |
-| `web/` | `/v2/` | Client v2. `index.html` + `app.css` + ES modules in `web/js/` (`app.js` auth/boot, `chat.js` contacts/send/receive, `vault.js` encrypted local storage, `api.js`, `dom.js`) |
+| `web/` | `/v2/` | Client v2. `index.html` + `app.css` + ES modules in `web/js/` (`app.js` auth/boot, `chat.js` contacts/send/receive/🔒SM2, `sm2.js` the Telegram text format, `vault.js` encrypted local storage, `api.js`, `dom.js`) |
 | `landing/` | `/` | Home page (served by `main.py` with `FileResponse`) |
 | `shared/` | `/shared/` | `crypto.js`, `dlp.js`, `ui.css` (design tokens + components, light/dark), `vendor/libsodium.js`. Shared by v2, the landing page, the Mini App and `attacks/crypto_helper.js` |
-| `telegram-miniapp/` | `/tg/` (step 5) | Telegram Mini App. Reuses `/shared/` (including `ui.css`) |
+| `telegram-miniapp/` | `/tg/` | CipherBridge Mini App = the v2 client signed in through Telegram. `index.html` is **generated**: edit `web/index.html` or `auth.html`, then run `python scripts\build_miniapp.py`. `app.js` (Telegram login + PIN) imports `/v2/js/*.js` |
 
 - Plain JS with no build step and no CDN (the only exception is Telegram's own `telegram-web-app.js` in the Mini App).
 - Script order: `/shared/vendor/libsodium.js`, then `/shared/crypto.js`, then `/shared/dlp.js`, then `app.js`. Use absolute `/shared/` paths.

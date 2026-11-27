@@ -2,6 +2,27 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: feat: CipherBridge Telegram bot and Mini App (Claude Code)
+- **Checked first:** the initData rules on core.telegram.org/bots/webapps (secret key = HMAC-SHA256 of the bot token keyed with
+  "WebAppData"; every field except `hash`, sorted, `key=value`, joined with newlines; `signature` stays in) and the
+  python-telegram-bot 22.8 signatures in the installed package.
+- **Backend:** `telegram_auth.py` (validator + a signer used only by tests), `POST /api/tg/auth` (creates `tg_<id>` on first login),
+  `POST /api/tg/share` (only 🔒SM2 text, only tg_ accounts, never passes the token-bearing URL into errors), `tg_` names reserved in
+  v2 register, v1 register and login, `/tg` static mount, new rate limiters.
+- **Bot:** `backend/bot/bot.py`: /start with the Mini App button, sets the menu button, Decrypt button for forwarded 🔒SM2 text
+  (opens `/tg/?m=...`), inline-mode button, warns against sending readable text. httpx logging muted so the token never hits a log.
+- **Frontend:** the Mini App is the v2 client: `scripts/build_miniapp.py` generates `frontend/telegram-miniapp/index.html` from
+  `frontend/web/index.html` with a Telegram sign-in + PIN block (`auth.html`); `app.js` there handles login/PIN and imports `/v2/js/*`.
+  `chat.js` got Seal for Telegram and Open a 🔒SM2 message (both in the web app too), `sm2.js` holds the format; the inbox refuses
+  `channel` envelopes and the paste box requires `channel: "telegram"`; tamper check before the replay check.
+- **Attacks:** `test_telegram_auth.py` (forged/missing/odd hash, edited user id, expired, future, repeated field, non-number id, live
+  server refuses, tg_ names blocked, share endpoint 401/403) and `test_telegram_view.py` (no plaintext in the Telegram text, other keys
+  can't open it, edited text/header fail, second open is a replay, cut-off copy refused). Both go red when the validator is weakened.
+- **Verified:** suite 8/8 PASS on a test server with a made-up bot token; Mini App browser test with a stubbed Telegram script
+  (outside-Telegram hint, PIN create/mismatch/wrong PIN, seal, share link, open in the web app, replay, tamper, wrong recipient,
+  inbox delivery, `?m=` link, dark theme, sensitive refused) and the web regression test, no console errors.
+- **Human check needed:** real bot token + cloudflared tunnel, then the steps in README "CipherBridge: Telegram Setup".
+
 ## 2026-11-27: fix: messages lost with the same account open in two tabs; landing polish (Claude Code)
 - **Bug (reported by the user):** a message sent to `harshitt` never showed up. The DB showed it had been delivered and deleted,
   and `harshitt` had overlapping sessions. Reproduced with Playwright: tab B received and stored the message and deleted it from the

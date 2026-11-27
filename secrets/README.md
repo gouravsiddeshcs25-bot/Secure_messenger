@@ -7,7 +7,7 @@ Claude Code is denied Read/Edit access to this folder (see `.claude/settings.jso
 1. Copy the template: `copy secrets\.env.example secrets\.env` (Windows) or `cp secrets/.env.example secrets/.env`.
 2. Fill in each value:
    - `TELEGRAM_BOT_TOKEN`: from @BotFather (`/newbot`). Looks like `123456789:AA...`.
-   - `MINIAPP_URL`: the public HTTPS URL serving the Mini App (e.g. an ngrok/cloudflared tunnel to `/miniapp/`).
+   - `MINIAPP_URL`: the public HTTPS URL serving the Mini App (the cloudflared tunnel URL plus `/tg/`, e.g. `https://abc-def.trycloudflare.com/tg/`).
    - `SESSION_SECRET`: a long random value. Generate one with
      `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
    - `LAB_MODE`: leave empty normally. Set `LAB_MODE=1` only for a demo of the "database breach" view at

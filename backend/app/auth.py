@@ -137,6 +137,9 @@ class RateLimiter:
 login_limiter = RateLimiter(limit=5)
 # Register: 30 sign-ups per minute per IP (stops mass account creation, lets the attack suite run).
 register_limiter = RateLimiter(limit=30)
+# Telegram login: 30 per minute per IP. Sharing: 20 per minute per user (each share calls Telegram).
+telegram_limiter = RateLimiter(limit=30)
+share_limiter = RateLimiter(limit=20)
 
 
 def client_ip(request: Request) -> str:

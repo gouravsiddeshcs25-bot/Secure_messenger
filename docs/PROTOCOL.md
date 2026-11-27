@@ -119,3 +119,43 @@ When `is_sensitive == true`:
 - If the identity key is different, the chat shows "security key changed", **sending is blocked** and incoming messages from that contact are held, until the user compares the new safety number and accepts it. Accepting resets the contact to "not verified".
 - "Verified" is shown only after the user confirms that the safety numbers match.
 - `attacks/test_mitm_key_swap.py` checks this with a real server-side key swap.
+
+## CipherBridge: messages through Telegram (🔒SM2)
+
+Telegram's normal chats and bot chats are not end-to-end encrypted. CipherBridge adds our encryption on top:
+the user writes the message in our app, the app seals it, and only the sealed text goes into Telegram.
+
+**Sealing** (`sealForTelegram()` in `frontend/web/js/chat.js`, format in `frontend/web/js/sm2.js`):
+1. Same steps as a normal v2 message: re-check the contact's keys (trust on first use), take the next message number
+   for that contact, derive the per-message key, encrypt with ChaCha20-Poly1305 and sign with Ed25519.
+2. The header gets one extra field, `channel: "telegram"`. It is inside the signed and authenticated header.
+3. The text is `🔒SM2:` + base64url (no padding) of the envelope JSON `{header, nonce, ciphertext, signature}`.
+   It must fit in one Telegram message (4096 characters), so the message itself is limited to 1500 characters.
+4. Sensitive messages can't be sealed for Telegram: a pasted text can't disappear on a timer.
+
+**Opening** (`openSm2()` in `chat.js`), in this order:
+1. Decode the text. Refuse it if it isn't version 2 with `channel: "telegram"`.
+2. Refuse it if `recipient` isn't me ("sealed for someone else") or `sender` is me.
+3. Fetch the sender's keys and apply trust on first use. A changed key means: review it first, nothing is opened.
+4. Check the Ed25519 signature and the Poly1305 tag. Any change to the text fails here ("tamper check").
+5. Replay check: Telegram messages can be opened in any order, so the client keeps the list of message numbers
+   it has already opened from each contact (`tgSeen` in the encrypted vault). A number seen before is refused.
+
+The two routes can't be mixed up: the inbox refuses any envelope with a `channel` field, and the paste box refuses
+any envelope without `channel: "telegram"`. Both routes share one counter per contact, so a message number, and so
+a message key, is never used twice.
+
+## Telegram login (Mini App)
+
+1. Telegram opens the Mini App at `/tg/` and gives it `Telegram.WebApp.initData`, signed by Telegram.
+2. The Mini App sends that string to `POST /api/tg/auth`. The server (`backend/app/telegram_auth.py`) checks it
+   as described at https://core.telegram.org/bots/webapps ("Validating data received via the Mini App"):
+   - `secret_key = HMAC-SHA256(key = "WebAppData", message = bot_token)`
+   - `data_check_string` = every field except `hash`, sorted by name, as `key=value`, joined with `\n`
+   - accept only if `hex(HMAC-SHA256(key = secret_key, message = data_check_string)) == hash`
+     (compared with `hmac.compare_digest`), and `auth_date` is less than 1 hour old.
+3. The user id is read only from the checked data. The account is `tg_<telegram id>`. `tg_` names can't be
+   registered or used with a password, so a valid Telegram signature is the only way in.
+4. The private keys are made on the phone and kept in the same encrypted vault as the web app, locked with a
+   PIN (Argon2id) instead of a password. The PIN never leaves the device.
+5. The bot only ever handles 🔒SM2 ciphertext (its Decrypt button opens `/tg/?m=<sealed text>`). It never decrypts.

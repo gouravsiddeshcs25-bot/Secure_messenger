@@ -27,6 +27,7 @@
         <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></symbol>
         <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
         <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-3 2-5 3.5-7 .5 2 1.5 3 3 3.5C12 8 12.5 5.5 14.5 3c.5 3 4 5.5 4 10 0 4.5-2.6 8-6.5 8z"/></symbol>
+        <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
         <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
     </svg>
 
@@ -96,6 +97,7 @@
                 <input class="input" id="search" placeholder="Start a chat by username" autocomplete="off" spellcheck="false" aria-label="Start a chat by username">
                 <div class="search-results" id="searchResults" hidden></div>
             </div>
+            <button class="open-sm2" id="openSm2Btn"><svg class="icon icon-sm"><use href="#i-unlock"/></svg>Open a 🔒SM2 message</button>
             <nav class="chat-list" id="chatList" aria-label="Chats"></nav>
             <div class="sidebar-foot"><span class="live-dot" id="liveDot"></span><span id="liveText">Checking for new messages</span></div>
         </aside>
@@ -135,6 +137,7 @@
                             <button type="button" class="toggle-sensitive" id="sensitiveBtn" aria-pressed="false"><svg class="icon icon-sm"><use href="#i-clock"/></svg>Sensitive</button>
                             <textarea id="text" rows="1" placeholder="Write a message" aria-label="Message"></textarea>
                         </div>
+                        <button class="icon-btn seal-btn" id="sealBtn" aria-label="Seal as a 🔒SM2 text for Telegram" title="Seal for Telegram"><svg class="icon"><use href="#i-share"/></svg></button>
                         <button class="btn btn-primary send-btn" id="sendBtn" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
                     </div>
                 </footer>
@@ -181,6 +184,36 @@
         <div class="dialog-actions">
             <button class="btn btn-quiet" id="passCancel">Cancel</button>
             <button class="btn btn-primary" id="passOk">Open message</button>
+        </div>
+    </dialog>
+
+    <!-- A message sealed as a 🔒SM2 text for Telegram -->
+    <dialog class="dialog" id="sealDialog">
+        <div class="dialog-body">
+            <h2>Sealed for <span id="sealPeer"></span></h2>
+            <p>Paste this into any Telegram chat. Telegram only sees scrambled text, and only the person you sealed it for can open it.</p>
+            <pre class="wire cipher sealed-text" id="sealOut"></pre>
+        </div>
+        <div class="dialog-actions">
+            <button class="btn btn-quiet" id="sealClose">Close</button>
+            <button class="btn btn-quiet" id="sealCopy">Copy</button>
+            <button class="btn btn-primary" id="sealShare" hidden>Share to a chat</button>
+        </div>
+    </dialog>
+
+    <!-- Open a pasted 🔒SM2 text -->
+    <dialog class="dialog" id="openDialog">
+        <form class="dialog-body" id="openForm">
+            <h2>Open a 🔒SM2 message</h2>
+            <p>Paste the whole message you got in Telegram. It's checked for tampering and replays before it opens.</p>
+            <div class="field">
+                <textarea class="input cipher open-input" id="openInput" rows="4" aria-label="🔒SM2 message" spellcheck="false" placeholder="🔒SM2:…"></textarea>
+                <div class="field-hint" id="openHint"></div>
+            </div>
+        </form>
+        <div class="dialog-actions">
+            <button class="btn btn-quiet" id="openCancel">Cancel</button>
+            <button class="btn btn-primary" id="openGo">Open</button>
         </div>
     </dialog>
 

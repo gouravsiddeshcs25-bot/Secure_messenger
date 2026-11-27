@@ -4,6 +4,7 @@ Mounts API routes and serves static web clients:
 - /   : home page (frontend/landing)
 - /v1: Naive insecure client
 - /v2: Hardened zero-knowledge client
+- /tg : CipherBridge Telegram Mini App (the v2 client, signed in through Telegram)
 """
 
 import os
@@ -41,6 +42,7 @@ app.include_router(routes.v1_router)   # /api/v1  : insecure v1 (attack-lab targ
 CLIENT_V1_DIR = os.path.join(REPO_ROOT, "frontend", "legacy-insecure")
 CLIENT_V2_DIR = os.path.join(REPO_ROOT, "frontend", "web")
 SHARED_DIR = os.path.join(REPO_ROOT, "frontend", "shared")
+MINIAPP_DIR = os.path.join(REPO_ROOT, "frontend", "telegram-miniapp")
 
 # Ensure directories exist
 os.makedirs(CLIENT_V1_DIR, exist_ok=True)
@@ -50,6 +52,7 @@ os.makedirs(SHARED_DIR, exist_ok=True)
 # Mount static files
 app.mount("/v1", StaticFiles(directory=CLIENT_V1_DIR, html=True), name="client_v1")
 app.mount("/v2", StaticFiles(directory=CLIENT_V2_DIR, html=True), name="client_v2")
+app.mount("/tg", StaticFiles(directory=MINIAPP_DIR, html=True), name="telegram_miniapp")
 app.mount("/shared", StaticFiles(directory=SHARED_DIR), name="shared")
 
 LANDING_PAGE = os.path.join(REPO_ROOT, "frontend", "landing", "index.html")

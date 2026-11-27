@@ -9,13 +9,18 @@ Two separate routers:
 """
 
 import os
+import secrets
 from typing import List, Optional
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from . import auth, database
+from . import auth, database, telegram_auth
 from .auth import require_user
+from .telegram_auth import TELEGRAM_PREFIX
+
+SM2_PREFIX = "\U0001F512SM2:"   # "🔒SM2:", the start of every sealed message shared through Telegram
 
 router = APIRouter(prefix="/api")
 v1_router = APIRouter(prefix="/api/v1")
@@ -51,6 +56,8 @@ class MessageSendRequest(BaseModel):
 def register(req: AccountRequest, request: Request):
     """Creates an account with an Argon2id password hash and logs it in."""
     auth.register_limiter.hit(auth.client_ip(request))
+    if req.username.startswith(TELEGRAM_PREFIX):
+        raise HTTPException(status_code=400, detail="Names starting with tg_ are reserved for Telegram accounts")
     if not database.create_account(req.username, auth.hash_password(req.password)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username is taken")
     return auth.new_session(req.username)
@@ -60,6 +67,9 @@ def login(req: LoginRequest, request: Request):
     """Same 401 text for an unknown user and a wrong password, so attackers can't find valid usernames."""
     username = req.username.strip().lower()
     auth.login_limiter.hit(f"{auth.client_ip(request)}|{username}")
+    if username.startswith(TELEGRAM_PREFIX):
+        # Telegram accounts have no password; they sign in only through /api/tg/auth.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=auth.INVALID_LOGIN)
     if not auth.check_login(username, req.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=auth.INVALID_LOGIN)
     return auth.new_session(username)
@@ -120,6 +130,88 @@ def delete_message(message_id: int, user: str = Depends(require_user)):
         raise HTTPException(status_code=404, detail="Message not found or already deleted")
     return {"status": "ok", "deleted": True}
 
+# ---------- Telegram (CipherBridge Mini App) ----------
+
+class TelegramAuthRequest(BaseModel):
+    init_data: str = Field(..., min_length=1, max_length=telegram_auth.MAX_INIT_DATA_CHARS)
+
+class TelegramShareRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4096)
+
+def _bot_token() -> str:
+    # Read on every call; after editing secrets/.env only a restart is needed. Never logged or returned.
+    return os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+@router.post("/tg/auth")
+def telegram_login(req: TelegramAuthRequest, request: Request):
+    """
+    Logs in a Telegram user. The Mini App sends the raw Telegram.WebApp.initData string. The server checks
+    Telegram's signature (telegram_auth.py) and takes the user id ONLY from that signed data.
+    """
+    auth.telegram_limiter.hit(auth.client_ip(request))
+    token = _bot_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Telegram login is not set up on this server")
+    try:
+        tg_user = telegram_auth.validate_init_data(req.init_data, token)
+    except telegram_auth.InvalidInitData as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+    username = telegram_auth.username_for(tg_user["id"])
+    new_account = False
+    if not database.is_v2_account(username):
+        # First visit: create the account. It gets a random password that nobody ever sees, and
+        # /api/login refuses tg_ names anyway, so the only way in is a valid Telegram signature.
+        if database.user_exists(username):
+            raise HTTPException(status_code=409, detail="This Telegram name is blocked by an old v1 account")
+        if not database.create_account(username, auth.hash_password(secrets.token_urlsafe(32))):
+            raise HTTPException(status_code=409, detail="Account is being created, try again")
+        new_account = True
+    session = auth.new_session(username)
+    session["first_name"] = str(tg_user.get("first_name", ""))[:64]
+    session["new_account"] = new_account
+    return session
+
+@router.post("/tg/share")
+def telegram_share(req: TelegramShareRequest, user: str = Depends(require_user)):
+    """
+    Lets the Mini App share a sealed message into any Telegram chat (Telegram.WebApp.shareMessage).
+    The server asks Telegram to keep a prepared message (Bot API savePreparedInlineMessage) and returns its id.
+    Only 🔒SM2 ciphertext is accepted, so nobody can use our bot to post readable text.
+    """
+    if not user.startswith(TELEGRAM_PREFIX):
+        raise HTTPException(status_code=403, detail="Only Telegram accounts can share through the bot")
+    if not req.text.startswith(SM2_PREFIX):
+        raise HTTPException(status_code=400, detail="Only sealed 🔒SM2 messages can be shared")
+    token = _bot_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Telegram is not set up on this server")
+    auth.share_limiter.hit(user)
+    body = {
+        "user_id": int(user[len(TELEGRAM_PREFIX):]),
+        "result": {
+            "type": "article",
+            "id": secrets.token_hex(16),
+            "title": "Encrypted message",
+            "description": "Only the person it was sealed for can open it",
+            "input_message_content": {"message_text": req.text},
+        },
+        "allow_user_chats": True,
+        "allow_bot_chats": True,
+        "allow_group_chats": True,
+        "allow_channel_chats": True,
+    }
+    try:
+        # https://core.telegram.org/bots/api#savepreparedinlinemessage
+        r = requests.post(f"https://api.telegram.org/bot{token}/savePreparedInlineMessage", json=body, timeout=10)
+        data = r.json()
+    except Exception:
+        # Don't pass the exception on: its text can contain the URL, and the URL contains the bot token.
+        raise HTTPException(status_code=502, detail="Couldn't reach Telegram. Use Copy instead.")
+    if not data.get("ok"):
+        raise HTTPException(status_code=502, detail="Telegram refused the share: " + str(data.get("description", ""))[:120])
+    return {"prepared_id": data["result"]["id"]}
+
 @router.get("/dump/messages")
 def dump_messages():
     """
@@ -154,7 +246,10 @@ class V1MessageSendRequest(BaseModel):
 
 @v1_router.post("/register", status_code=status.HTTP_201_CREATED)
 def v1_register(req: V1RegisterRequest):
-    """No password. Anyone can claim any name."""
+    """No password. Anyone can claim any name (except tg_ names, which are reserved for Telegram accounts)."""
+    if req.username.strip().startswith(TELEGRAM_PREFIX):
+        # Not a v1 security fix: it stops v1 from squatting a name a real Telegram user will get later.
+        raise HTTPException(status_code=400, detail="Names starting with tg_ are reserved")
     database.register_user(req.username.strip())
     return {"status": "ok", "username": req.username}
 

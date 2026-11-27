@@ -5,11 +5,11 @@ description: Conventions for backend/ (FastAPI + SQLite) in Secure Messenger. Us
 # Backend conventions
 
 ## Layout
-- `backend/app/main.py`: the app, loading `secrets/.env` (python-dotenv), static mounts `/v1`, `/v2`, `/shared` and the `/` switchboard.
+- `backend/app/main.py`: the app, loading `secrets/.env` (python-dotenv), static mounts `/v1`, `/v2`, `/tg`, `/shared` and the `/` home page.
 - `backend/app/routes.py`: `APIRouter(prefix="/api")` with Pydantic request models.
 - `backend/app/database.py`: sqlite3. The DB is `backend/data/messenger.db` (override with `MESSENGER_DB_PATH`).
 - `backend/app/auth.py` (step 3): Argon2id, sessions, ownership checks.
-- `backend/bot/` (step 5): the Telegram bot.
+- `backend/app/telegram_auth.py`: Telegram initData check. `backend/bot/bot.py`: the Telegram bot.
 - Run it from the repo root: `python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload`.
 
 ## Rules

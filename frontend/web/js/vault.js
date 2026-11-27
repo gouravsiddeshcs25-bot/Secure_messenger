@@ -25,7 +25,8 @@ let onConflict = () => {};
 export function whenConflict(fn) { onConflict = fn; }
 
 function emptyState() {
-    return { contacts: {}, out: {}, seen: {}, processed: [], history: {}, unread: {} };
+    // tgSeen: per contact, the message numbers already opened from pasted 🔒SM2 texts (replay check)
+    return { contacts: {}, out: {}, seen: {}, tgSeen: {}, processed: [], history: {}, unread: {} };
 }
 
 function read(username) {

@@ -51,6 +51,8 @@ async function main() {
                 one_time_view: !!input.one_time_view,
                 require_passphrase: !!input.require_passphrase
             };
+            // 🔒SM2 texts for Telegram carry channel = "telegram" as the last header field, like chat.js.
+            if (input.channel) header.channel = input.channel;
 
             const env = Crypto.encryptEnvelope(privId, msgKey, input.plaintext, header);
             Crypto.scrub(msgKey);

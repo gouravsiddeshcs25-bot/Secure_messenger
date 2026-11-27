@@ -104,6 +104,9 @@ secure_messenger/
 │   ├── test_tamper_ciphertext.py # Bit-flip & ciphertext corruption attack
 │   ├── test_database_dump.py   # SQL database exfiltration attack
 │   ├── test_expired_message.py # Expiration & memory scrub attack
+│   ├── test_unauthorized_access.py # Broken access control (IDOR, brute force)
+│   ├── test_telegram_auth.py   # Forged / expired / edited Telegram initData
+│   ├── test_telegram_view.py   # What Telegram's servers can read
 │   └── run_all_attacks.py      # Unified runner outputting PASS/FAIL table
 ├── contracts/                  # API.md + examples: the frontend/backend handshake
 ├── plan/                       # PLAN, TASKS, PROGRESS, DECISIONS, LESSONS, AI-LOG
@@ -142,6 +145,7 @@ Open your browser to:
 - **Lab Switchboard**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Client v1 (Insecure Target)**: [http://127.0.0.1:8000/v1/](http://127.0.0.1:8000/v1/)
 - **Client v2 (Hardened E2EE)**: [http://127.0.0.1:8000/v2/](http://127.0.0.1:8000/v2/)
+- **CipherBridge Mini App** (open it from Telegram): [http://127.0.0.1:8000/tg/](http://127.0.0.1:8000/tg/)
 
 ### Walkthrough: End-to-End Encrypted Exchange in Client v2
 1. Open two browser tabs to [http://127.0.0.1:8000/v2/](http://127.0.0.1:8000/v2/).
@@ -152,6 +156,28 @@ Open your browser to:
 6. Click **Send (E2EE)**.
 7. In Bob's tab, notice the locked card: `[🔒 Confidential Sensitive Message from alice]`.
 8. Click **Decrypt & View**: The message decrypts in memory, the server immediately purges the record (`DELETE /api/messages/{id}`), and an auto-burn countdown begins.
+
+---
+
+## 📨 CipherBridge: Telegram Setup (Windows)
+
+CipherBridge is the v2 messenger inside Telegram. Write a message, tap **Seal for Telegram**, and paste the
+`🔒SM2:...` text into any Telegram chat. Telegram only stores the scrambled text; the receiver opens it with
+**Open a 🔒SM2 message** (in the Mini App or at `/v2/`). The bot never sees readable text.
+
+1. **Create the bot.** In Telegram, open @BotFather, send `/newbot`, pick a name and a username ending in `bot`.
+   Copy the token it gives you. Also send `/setinline`, pick the bot, and type a placeholder like `Seal a message`.
+2. **Start an HTTPS tunnel** (Telegram only opens https pages). Install cloudflared, then in a new terminal:
+   `cloudflared tunnel --url http://localhost:8000`. Copy the `https://...trycloudflare.com` address it prints.
+3. **Fill `secrets\.env`** (copy `secrets\.env.example` first):
+   `TELEGRAM_BOT_TOKEN=<token from BotFather>` and `MINIAPP_URL=https://<your tunnel>/tg/`. Never commit or share this file.
+4. **Restart the server**, then **run the bot** in another terminal: `python backend\bot\bot.py`.
+   The bot sets its own menu button to open the Mini App.
+5. In Telegram, open your bot and press **Start**, then **Open CipherBridge**. Choose a PIN; your keys are made on the phone.
+6. To receive: forward a `🔒SM2:` message to the bot and tap **Decrypt**, or paste it into **Open a 🔒SM2 message**.
+
+The tunnel address changes every time cloudflared restarts: update `MINIAPP_URL` and restart the bot.
+Telegram (and our server) still see who talks to whom and when; only the content is hidden.
 
 ---
 
@@ -182,11 +208,14 @@ python attacks/run_all_attacks.py
 ----------------------------------------------------------------------------------------
 Attack                     | v1 Expected        | v1 Actual          | v2 Expected                  | v2 Actual                    | Status
 ----------------------------------------------------------------------------------------
-MITM swaps keys            | succeeds silently  | succeeds silently  | caught by fingerprint check  | caught by fingerprint check  | ✅ PASS
+MITM swaps keys            | succeeds silently  | succeeds silently  | key change detected          | key change detected          | ✅ PASS
 Replay captured message    | accepted twice     | accepted twice     | rejected                     | rejected                     | ✅ PASS
 Tamper with ciphertext     | altered text shown | altered text shown | auth tag fails               | auth tag fails               | ✅ PASS
 Dump server database       | plaintext readable | plaintext readable | only ciphertext              | only ciphertext              | ✅ PASS
 Open expired message       | still readable     | still readable     | key gone, undecryptable      | key gone, undecryptable      | ✅ PASS
+Unauthorized access        | all succeed        | all succeed        | blocked (401/403/404/429)    | blocked (401/403/404/429)    | ✅ PASS
+Forged Telegram login      | any name accepted  | any name accepted  | forged login rejected        | forged login rejected        | ✅ PASS
+Telegram reads the chat    | Telegram reads it  | Telegram reads it  | only ciphertext, tamper caught | only ciphertext, tamper caught | ✅ PASS
 ----------------------------------------------------------------------------------------
 ```
 Detailed technical explanations are preserved in [docs/RESULTS.md](docs/RESULTS.md).

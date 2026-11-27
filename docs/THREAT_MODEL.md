@@ -18,6 +18,8 @@ This project implements a secure messenger for sensitive communication where:
 | **2. Malicious or Breached Server** | Complete control or dump of the central database; ability to inspect stored records, logs, and metadata; ability to alter stored ciphertext or attempt to inject rogue public keys. | **Zero-Knowledge design**: Server only receives ciphertext, nonces, and public keys. Private keys never leave the browser. Public keys are signed and verified against out-of-band fingerprints. AEAD authentication tags immediately detect server tampering. |
 | **3. Recipient Turning Hostile** | Authenticated recipient who attempts to retain, re-export, or leak messages beyond intended scope or validity period. | Ephemeral sensitive-message mode: client-side memory scrubbing, strict one-time view enforcement, expiration timers, and immediate cryptographic deletion of per-message keys after decryption. |
 | **4. Stolen or Unlocked Device** | Unauthorized physical or forensic access to a sender or recipient's unlocked workstation or browser session. | Master secrets and sensitive messages are not stored in plaintext `localStorage`; sensitive messages require local passphrase re-authentication via **Argon2id (`crypto_pwhash`)** to decrypt; in-memory session keys are zeroed upon session expiry. |
+| **5. Telegram (or anyone inside Telegram's servers)** | Stores and can read every normal chat and bot chat; can change or re-send what is stored. | CipherBridge seals the message before it reaches Telegram (`🔒SM2` text): Telegram only stores ciphertext. Signature + Poly1305 tag catch any change; the client refuses a message number it has already opened. |
+| **6. Forged Telegram login** | Mallory sends made-up, copied or edited `initData` to sign in as another Telegram user. | The server checks Telegram's HMAC-SHA256 signature over all fields with a key derived from the bot token, compares in constant time, and refuses data older than 1 hour. `tg_` names can't be registered or used with a password. |
 
 ---
 
@@ -51,3 +53,9 @@ All cryptographic operations are performed strictly client-side using **libsodiu
    - Expiration and one-time view policies are enforced by the recipient's client runtime. A technologically sophisticated recipient who modifies their client code, intercepts network packets with their own private key, or attaches a memory debugger can retain messages.
 3. **Screen Capture & Physical Displays**:
    - No cryptographic system can prevent a user from taking a physical photograph of the screen or using OS-level screen recording tools while a message is actively rendered.
+4. **Telegram metadata**:
+   - Telegram, and our server, still see who talks to whom, when, and how long the messages are. CipherBridge hides the content, not the fact that people talk.
+5. **Trusting the Mini App code**:
+   - The Mini App is served by our server, like the web app, so users must trust the JavaScript we serve. It also loads Telegram's own `telegram-web-app.js`, so users trust Telegram's script on that page too.
+6. **Copied initData**:
+   - A valid `initData` string that someone copies off a phone can be replayed until it is 1 hour old. Telegram gives it only to the Mini App, so this needs access to the user's device or Telegram session.

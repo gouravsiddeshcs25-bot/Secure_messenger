@@ -6,6 +6,7 @@ import { $, el, icon, toast, sleep, nextFrame, confirmDialog } from "./dom.js";
 import { api, readError, setToken, whenUnauthorized } from "./api.js";
 import * as vault from "./vault.js";
 import * as chat from "./chat.js";
+import { PREFIX } from "./sm2.js";
 
 let mode = "login";
 let signedInAs = null;
@@ -201,6 +202,9 @@ $("authForm").addEventListener("submit", async (e) => {
         show("appScreen");
         chat.start(username, keys);
         toast(mode === "register" ? "Account created. Your keys are locked on this device." : "Signed in as " + username);
+        // A link like /v2/?m=<sealed message> opens that 🔒SM2 message straight after sign-in.
+        const pending = new URLSearchParams(location.search).get("m");
+        if (pending) chat.promptOpen(PREFIX + pending);
     } catch (err) {
         setToken(null);
         vault.lock();

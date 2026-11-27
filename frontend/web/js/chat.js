@@ -5,6 +5,7 @@
 import { $, el, icon, toast, scramble, noise, sleep, askPassword, timeLabel, dayLabel } from "./dom.js";
 import { api, readError } from "./api.js";
 import * as vault from "./vault.js";
+import * as Sm2 from "./sm2.js";
 
 const POLL_MS = 2000;
 const KEY_REFRESH_TICKS = 5;      // re-check the open chat's keys every ~10 s
@@ -19,6 +20,9 @@ let pollTimer = null;
 let ticks = 0;
 let polling = false;
 let usersCache = { at: 0, list: [] };
+let shareHandler = null;          // set by the Telegram Mini App: shares a 🔒SM2 string into a Telegram chat
+
+export function setShareHandler(fn) { shareHandler = fn; }
 
 // ======================================================================
 // Start / stop
@@ -310,7 +314,12 @@ function renderItem(item) {
         el("div", { class: "meta" },
             el("span", { text: timeLabel(item.ts) }),
             el("button", { onclick: () => showProtection(item), "aria-label": "How this message was protected" },
-                icon("lock", "icon-sm lock"), el("span", { text: item.dir === "out" ? "Sent encrypted" : "Encrypted" }))));
+                icon("lock", "icon-sm lock"), el("span", { text: itemLabel(item) }))));
+}
+
+function itemLabel(item) {
+    if (item.via === "telegram") return item.dir === "out" ? "Sealed for Telegram" : "Opened from Telegram";
+    return item.dir === "out" ? "Sent encrypted" : "Encrypted";
 }
 
 function addNotice(peer, text, tone) {
@@ -333,11 +342,14 @@ function showProtection(item) {
         ["Message number", String(header.counter ?? "?")],
         ["Encryption", "ChaCha20-Poly1305 with a key made only for this message number"],
         ["Signed by", sender + "'s identity key (Ed25519)" + (item.dir === "in" ? ", signature checked" : "")],
-        ["Replay check", item.dir === "in" ? "Accepted: number was higher than any seen before" : "The receiver rejects this number if it ever arrives again"],
+        ["Route", item.via === "telegram" ? "Pasted through Telegram as a 🔒SM2 text. Telegram only saw the scrambled text." : "Through our server's inbox"],
+        ["Replay check", item.dir === "in"
+            ? (item.via === "telegram" ? "Accepted: this message number had never been opened before" : "Accepted: number was higher than any seen before")
+            : "The receiver rejects this number if it ever arrives again"],
         ["Ciphertext", ctBytes + " bytes (your text plus a 16-byte tamper-check tag)"],
     ];
     $("protectFacts").replaceChildren(...facts.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
-    $("protectWire").textContent = env ? JSON.stringify(env, null, 2) : "(not available for this message)";
+    $("protectWire").textContent = env ? (item.via === "telegram" ? Sm2.encode(env) + "\n\n" : "") + JSON.stringify(env, null, 2) : "(not available for this message)";
     $("protectDialog").showModal();
 }
 
@@ -375,28 +387,24 @@ function selectedTtl() {
     return b ? parseInt(b.dataset.ttl, 10) : 60;
 }
 
-export async function send() {
-    const textBox = $("text");
-    const value = textBox.value.trim();
-    const peer = current;
-    if (!value || !peer) return;
-
+// Encrypts `value` for `peer` and signs it. Returns { header, env, envelope } or null (after telling the
+// user why) when the peer's keys can't be used right now. Used for the server inbox and for 🔒SM2 texts.
+async function sealFor(peer, value, flags, channel) {
     let p;
     try {
         p = await loadPeer(peer, true); // always re-check keys right before encrypting
     } catch (e) {
         toast(e.message, "danger");
-        return;
+        return null;
     }
     paintTrust();
     if (contactStatus(peer) === "changed" || contactStatus(peer) === "bad" || !p.shared) {
         toast("Not sent. " + peer + "'s key needs your review first.", "danger");
-        return;
+        return null;
     }
 
+    // One counter per contact for both routes, so every message number (and so every message key) is used once.
     const d = vault.data();
-    const isSensitive = sensitive || DLP.scan(value).detected;
-    const ttl = isSensitive ? selectedTtl() : null;
     const counter = (d.out[peer] || 0) + 1;
     d.out[peer] = counter;
     vault.save();
@@ -407,15 +415,36 @@ export async function send() {
         recipient: peer,
         counter,
         timestamp: Date.now(),
+        is_sensitive: flags.is_sensitive,
+        ttl_seconds: flags.ttl_seconds,
+        one_time_view: flags.one_time_view,
+        require_passphrase: flags.require_passphrase,
+    };
+    if (channel) header.channel = channel; // signed and authenticated like the rest of the header
+    const messageKey = Crypto.deriveMessageKey(p.shared, counter);
+    const envelope = Crypto.encryptEnvelope(myKeys.identity.privateKey, messageKey, value, header);
+    Crypto.scrub(messageKey);
+    const env = { header, nonce: envelope.nonceB64, ciphertext: envelope.ciphertextB64, signature: envelope.signatureB64 };
+    return { header, env, envelope };
+}
+
+export async function send() {
+    const textBox = $("text");
+    const value = textBox.value.trim();
+    const peer = current;
+    if (!value || !peer) return;
+
+    const isSensitive = sensitive || DLP.scan(value).detected;
+    const ttl = isSensitive ? selectedTtl() : null;
+    const sealed = await sealFor(peer, value, {
         is_sensitive: isSensitive,
         ttl_seconds: ttl,
         one_time_view: isSensitive ? $("oneTime").checked : false,
         require_passphrase: isSensitive && $("askPass").checked,
-    };
-    const messageKey = Crypto.deriveMessageKey(p.shared, counter);
-    const envelope = Crypto.encryptEnvelope(myKeys.identity.privateKey, messageKey, value, header);
-    Crypto.scrub(messageKey);
-    const wire = JSON.stringify({ header, nonce: envelope.nonceB64, ciphertext: envelope.ciphertextB64, signature: envelope.signatureB64 });
+    });
+    if (!sealed) return;
+    const { header, env, envelope } = sealed;
+    const wire = JSON.stringify(env);
 
     // Clear the composer right away, then play the seal animation while the request is in flight.
     textBox.value = "";
@@ -431,17 +460,17 @@ export async function send() {
     $("thread").append(node);
     scrollDown();
 
-    const sealed = envelope.ciphertextB64.slice(0, Math.max(16, Math.min(value.length + 12, 64)));
+    const scrambled = envelope.ciphertextB64.slice(0, Math.max(16, Math.min(value.length + 12, 64)));
     const request = api("/api/messages", {
         method: "POST",
         body: JSON.stringify({ recipient: peer, payload: wire, is_sensitive: isSensitive, ttl_seconds: ttl }),
     });
-    await scramble(bubble, value, sealed, 520);
+    await scramble(bubble, value, scrambled, 520);
     await sleep(240);
 
     let resp;
     try { resp = await request; } catch (e) { resp = null; }
-    await scramble(bubble, sealed, value, 360);
+    await scramble(bubble, scrambled, value, 360);
     bubble.classList.remove("sealing");
 
     if (!resp || !resp.ok) {
@@ -515,6 +544,11 @@ async function handleIncoming(m, id) {
         return done(m, id);
     }
     const header = env.header;
+    if (header.channel) {
+        // A 🔒SM2 text is meant to be pasted from Telegram, never delivered by the server.
+        addNotice(sender, "Dropped a message from " + sender + " that was made for Telegram, not for this inbox.");
+        return done(m, id);
+    }
     if (header.sender !== sender || header.recipient !== me) {
         addNotice(sender, "Dropped a message whose sender or recipient didn't match its envelope.");
         return done(m, id);
@@ -680,6 +714,133 @@ function addSecretCard(sender, m, header, plaintext) {
 }
 
 // ======================================================================
+// Telegram: seal a message as a 🔒SM2 text, and open one that was pasted
+// ======================================================================
+export async function sealForTelegram() {
+    const textBox = $("text");
+    const value = textBox.value.trim();
+    const peer = current;
+    if (!peer) return;
+    if (!value) { toast("Write the message first, then seal it for Telegram."); textBox.focus(); return; }
+    if (sensitive || DLP.scan(value).detected) {
+        toast("Sensitive messages can't go through Telegram, because a pasted text can't disappear. Send it here instead.", "danger");
+        return;
+    }
+    if (value.length > Sm2.MAX_TEXT_CHARS) {
+        toast("Too long for one Telegram message. Keep it under " + Sm2.MAX_TEXT_CHARS + " characters.", "danger");
+        return;
+    }
+    const sealed = await sealFor(peer, value, { is_sensitive: false, ttl_seconds: null, one_time_view: false, require_passphrase: false }, Sm2.CHANNEL);
+    if (!sealed) return;
+    const text = Sm2.encode(sealed.env);
+    if (text.length > Sm2.MAX_SEALED_CHARS) { toast("Too long for one Telegram message. Shorten it.", "danger"); return; }
+
+    const item = { dir: "out", text: value, ts: sealed.header.timestamp, wire: JSON.stringify(sealed.env), via: "telegram" };
+    vault.addHistory(peer, item);
+    vault.save();
+    textBox.value = "";
+    textBox.style.height = "auto";
+    $("dlp").hidden = true;
+    renderThread();
+    renderChatList();
+    showSealed(peer, text);
+}
+
+function showSealed(peer, text) {
+    $("sealPeer").textContent = peer;
+    $("sealOut").textContent = text;
+    $("sealShare").hidden = !shareHandler;
+    $("sealCopy").onclick = async () => {
+        try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into your Telegram chat with " + peer + "."); }
+        catch (e) { selectText($("sealOut")); toast("Select the text and copy it by hand."); }
+    };
+    $("sealShare").onclick = async () => {
+        try { await shareHandler(text); } catch (e) { toast(e.message || "Couldn't share. Use Copy instead.", "danger"); }
+    };
+    $("sealDialog").showModal();
+}
+
+function selectText(node) {
+    const r = document.createRange();
+    r.selectNodeContents(node);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+}
+
+// Opens the "paste a 🔒SM2 message" dialog, optionally filled in (for example from the bot's Decrypt button).
+export function promptOpen(prefill) {
+    $("openInput").value = prefill || "";
+    setOpenHint("");
+    $("openDialog").showModal();
+    if (prefill) openPasted(); else $("openInput").focus();
+}
+
+function setOpenHint(text, tone) {
+    $("openHint").textContent = text;
+    $("openHint").className = "field-hint" + (tone ? " hint-" + tone : "");
+}
+
+async function openPasted() {
+    $("openGo").disabled = true;
+    try {
+        const r = await openSm2($("openInput").value);
+        setOpenHint(r.text, r.ok ? "ok" : "danger");
+        if (r.ok) { $("openDialog").close(); toast(r.text); }
+        if (r.peer && (r.ok || r.review)) {
+            if (r.review) $("openDialog").close();
+            await openChat(r.peer);
+        }
+    } finally {
+        $("openGo").disabled = false;
+    }
+}
+
+// Runs every check on a pasted 🔒SM2 message, then decrypts it into the chat history.
+// Returns { ok, text, peer?, review? }. Never shows text that failed a check.
+export async function openSm2(pasted) {
+    let env;
+    try { env = Sm2.decode(pasted); } catch (e) { return { ok: false, text: e.message }; }
+    const header = env.header;
+    if (header.sender === me) return { ok: false, text: "This is a message you sealed for " + header.recipient + ". It's already in your chat with them." };
+    if (header.recipient !== me) return { ok: false, text: "This message was sealed for " + header.recipient + ", not for you. Only they can open it." };
+    const sender = header.sender;
+    if (typeof sender !== "string" || !/^[a-z0-9_-]{1,50}$/.test(sender)) return { ok: false, text: "The sender name in this message is not valid." };
+
+    let p;
+    try { p = await loadPeer(sender, true); } catch (e) { return { ok: false, text: e.message }; }
+    const status = contactStatus(sender);
+    if (status === "changed") return { ok: false, review: true, peer: sender, text: sender + "'s security key changed. Review it in your chat with " + sender + ", then open the message again." };
+    if (status === "bad" || !p.shared) return { ok: false, text: sender + "'s keys failed the signature check, so the message wasn't opened." };
+
+    if (!Number.isInteger(header.counter) || header.counter < 1) return { ok: false, text: "The message number is not valid." };
+
+    // 1. Tamper check first (signature + Poly1305 tag), so a changed copy is reported as tampered.
+    const messageKey = Crypto.deriveMessageKey(p.shared, header.counter);
+    let plaintext;
+    try {
+        plaintext = Crypto.decryptEnvelope(p.bundle.identity_pubkey, messageKey, env.nonce, env.ciphertext, header, env.signature);
+    } catch (e) {
+        return { ok: false, text: "This message failed its tamper check: someone changed it after " + sender + " sealed it. It wasn't opened." };
+    } finally {
+        Crypto.scrub(messageKey);
+    }
+
+    // 2. Replay check: Telegram messages can be opened in any order, so we remember every number already opened.
+    const d = vault.data();
+    const opened = d.tgSeen[sender] || (d.tgSeen[sender] = []);
+    if (opened.includes(header.counter)) {
+        plaintext = null; // a genuine copy, but not new: don't show it again as if it were
+        return { ok: false, text: "Replay blocked: you already opened message number " + header.counter + " from " + sender + ". A copy can't be accepted twice." };
+    }
+    opened.push(header.counter);
+    if (opened.length > 1000) opened.splice(0, opened.length - 1000);
+    vault.addHistory(sender, { dir: "in", text: plaintext, ts: header.timestamp, wire: JSON.stringify(env), via: "telegram" });
+    vault.save();
+    return { ok: true, peer: sender, text: "Opened message " + header.counter + " from " + sender + "." };
+}
+
+// ======================================================================
 // New chat search
 // ======================================================================
 export async function search(query) {
@@ -717,6 +878,12 @@ export function wire() {
     $("safetyConfirm").addEventListener("click", confirmSafety);
     $("safetyLater").addEventListener("click", () => $("safetyDialog").close());
     $("protectClose").addEventListener("click", () => $("protectDialog").close());
+    $("sealBtn").addEventListener("click", sealForTelegram);
+    $("sealClose").addEventListener("click", () => $("sealDialog").close());
+    $("openSm2Btn").addEventListener("click", () => promptOpen(""));
+    $("openCancel").addEventListener("click", () => $("openDialog").close());
+    $("openForm").addEventListener("submit", (e) => { e.preventDefault(); openPasted(); });
+    $("openGo").addEventListener("click", openPasted);
     $("backBtn").addEventListener("click", () => $("appScreen").classList.remove("chat-open"));
     let searchTimer = null;
     $("search").addEventListener("input", () => {

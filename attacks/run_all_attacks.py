@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Cybersecurity Skill Lab Attack Runner.
-Executes all 6 attack vectors against Client v1 and Client v2,
+Executes all 8 attack vectors against Client v1 and Client v2,
 prints a comparison matrix, and saves results into docs/RESULTS.md.
 """
 
@@ -27,6 +27,8 @@ import test_tamper_ciphertext
 import test_database_dump
 import test_expired_message
 import test_unauthorized_access
+import test_telegram_auth
+import test_telegram_view
 
 SERVER_URL = os.environ.get("SERVER_BASE", "http://127.0.0.1:8000")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,7 +71,9 @@ def run_suite():
         test_tamper_ciphertext,
         test_database_dump,
         test_expired_message,
-        test_unauthorized_access
+        test_unauthorized_access,
+        test_telegram_auth,
+        test_telegram_view
     ]
 
     results = []
@@ -140,6 +144,14 @@ def write_results_markdown(results):
         f.write("### Attack 6: Unauthorized Access\n")
         f.write("- **Client v1 Result**: `all succeed`. The v1 API (`/api/v1/...`) has no login, so Mallory can read Bob's inbox, send a message as Alice and delete Bob's messages.\n")
         f.write("- **Client v2 Defense**: `blocked (401/403/404/429)`. Every v2 call needs a session token (Argon2id password login, token stored only as a SHA-256 hash, 24h expiry). The server takes the user from the token, so Mallory can't overwrite Bob's keys, read his inbox (403), send as Alice or delete his messages (404). Six wrong passwords in a minute get HTTP 429, and logout ends the session.\n")
+
+        f.write("\n### Attack 7: Forged Telegram Login\n")
+        f.write("- **Client v1 Result**: `any name accepted`. v1 has no login, so Mallory just uses the victim's name and sends messages as them.\n")
+        f.write("- **Client v2 Defense**: `forged login rejected`. The Mini App sends Telegram's signed `initData` to `/api/tg/auth`. The server recomputes Telegram's HMAC-SHA256 (secret key = HMAC-SHA256 of the bot token keyed with `WebAppData`) over the sorted fields and compares it in constant time. A made-up hash, a missing hash, a user id changed after signing, a repeated field, and data older than one hour are all refused. Names starting with `tg_` can't be registered or used with a password, so the only way into a Telegram account is a genuine Telegram signature. The test signs with its own made-up bot token, never the real one.\n")
+
+        f.write("\n### Attack 8: Telegram Reads the Chat\n")
+        f.write("- **Client v1 Result**: `Telegram reads it`. Normal Telegram chats are not end-to-end encrypted, so plain text pasted there is readable on Telegram's servers.\n")
+        f.write("- **Client v2 Defense**: `only ciphertext, tamper caught`. CipherBridge seals the message as a `🔒SM2:` text (the signed v2 envelope with `channel: telegram`). The text Telegram stores has no plaintext; Mallory's keys can't open it; a changed character or header fails the Poly1305 tag and the Ed25519 signature; and opening the same copy twice is refused as a replay. Telegram still sees who is in the chat and when (metadata).\n")
 
     print(f"\n📄 Results successfully recorded to {RESULTS_PATH}")
 

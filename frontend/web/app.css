@@ -43,7 +43,7 @@
 /* ================= App shell ================= */
 .shell { display: grid; grid-template-columns: 320px minmax(0, 1fr); height: 100vh; overflow: hidden; }
 
-.sidebar { display: grid; grid-template-rows: auto auto 1fr auto; border-right: 1px solid var(--line); background: var(--surface); min-height: 0; }
+.sidebar { display: grid; grid-template-rows: auto auto auto 1fr auto; border-right: 1px solid var(--line); background: var(--surface); min-height: 0; }
 .me { display: flex; align-items: center; gap: 10px; padding: 14px 12px 14px 16px; }
 .me-name { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .search { padding: 0 12px 10px; position: relative; }
@@ -54,6 +54,8 @@
 .search-results button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px; border: 0; background: transparent; border-radius: var(--r-sm); cursor: pointer; text-align: left; }
 .search-results button:hover, .search-results button:focus-visible { background: var(--surface-2); }
 .search-results .empty { padding: 10px; font-size: 13px; color: var(--ink-3); }
+.open-sm2 { display: flex; align-items: center; gap: 8px; margin: 0 12px 8px; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.open-sm2:hover { background: var(--surface-2); color: var(--ink); }
 
 .chat-list { overflow-y: auto; padding: 4px 8px; min-height: 0; }
 .chat-item {
@@ -139,6 +141,8 @@
 .toggle-sensitive[aria-pressed="true"] { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 .send-btn { width: 44px; height: 44px; border-radius: 50%; padding: 0; }
 .send-btn .icon { width: 20px; height: 20px; }
+.seal-btn { width: 44px; height: 44px; border-radius: 50%; color: var(--ink-2); }
+.seal-btn:hover { color: var(--accent); }
 .options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: var(--ink-2); animation: slide-down 200ms var(--ease-out); }
 .options[hidden] { display: none; }
 .chips { display: inline-flex; gap: 4px; }
@@ -156,6 +160,10 @@
 .facts dt { color: var(--ink-3); }
 .facts dd { margin: 0; }
 .wire { max-height: 160px; overflow: auto; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); color: var(--ink-2); white-space: pre-wrap; }
+.sealed-text { max-height: 200px; word-break: break-all; user-select: all; color: var(--ink); }
+.open-input { width: 100%; resize: vertical; min-height: 96px; font-size: 12.5px; word-break: break-all; }
+.field-hint.hint-ok { color: var(--ok); }
+.field-hint.hint-danger { color: var(--danger); }
 
 /* ================= Small screens ================= */
 @media (max-width: 860px) {

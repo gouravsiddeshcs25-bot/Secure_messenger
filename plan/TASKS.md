@@ -11,3 +11,4 @@ Each step has a ready prompt in `prompts/`.
 - [ ] 6. New attack tests (`prompts/06-attack-tests.md`)
 - [ ] 7. Docs and report (`prompts/07-docs-report.md`)
 - [ ] 8. Demo prep (`prompts/08-demo-prep.md`)
+- [ ] 9. Public deployment: v2 + Mini App + bot online for anyone (after 6-8). v1 and lab endpoints off in public; real database with backups; bot in webhook mode; hosting choice TBD (Render/Railway/Fly vs Vercel + hosted Postgres)

@@ -2,22 +2,30 @@
 
 ## Current state
 - Branch: `upgrades`
-- Step 3 (A) done: Argon2id accounts, session tokens (SHA-256 hash stored, 24h), `require_user` on every v2 route,
-  ownership checks, rate limits (login 5/min per IP+username, register 30/min per IP), dump endpoint locked behind `LAB_MODE=1`.
-- v2 API at `/api/...`, insecure v1 API at `/api/v1/...` (v1 routes refuse v2 accounts so they aren't a back door).
-- v2 web client: register / log in / log out, token in memory only, no `innerHTML` left.
-- Attack suite: **6/6 PASS** (new: Unauthorized access).
+- Step 3 (A) done: Argon2id accounts, hashed session tokens, `require_user`, ownership checks, rate limits, dump behind `LAB_MODE=1`,
+  v1 on `/api/v1` (can't touch v2 accounts).
+- Step 4 (B) done together with a full frontend redesign:
+  - New design system `frontend/shared/ui.css` (light + dark, tokens, SVG icon sprite, no emoji/gradients), approved by the user via a preview.
+  - v2 rewritten as ES modules in `frontend/web/js/` (app, chat, vault, api, dom). Sidebar chats, user search, safety-number dialog,
+    "How this message was protected" dialog, sensitive cards with countdown ring / reveal / burn, toasts and dialogs instead of alerts.
+  - Keys persist per browser, sealed with Argon2id + XChaCha20-Poly1305 (`vault.js`); contacts, counters and history too.
+  - Trust on first use: key change -> red banner, sending blocked, incoming held until the user reviews; "Verified" only after confirming.
+  - Home page at `/` (`frontend/landing/index.html`).
+  - Honest wording: "per-message keys", not forward secrecy; nonce is 12 bytes.
+- Attack suite: **6/6 PASS**. MITM test now does a real server-side key swap after first contact.
+- Browser end-to-end check (Playwright + Edge, two users): register, chat both ways, verify, reload keeps history,
+  sensitive reveal/burn, key change blocks sending, accept and deliver again. No console errors.
 
 ## Last checkpoint
-- 2026-11-27 · `upgrades` · feat: argon2id login, sessions and access control. Suite 6/6 PASS. User tested register/login by hand.
+- 2026-11-27 · `upgrades` · feat: redesigned v2 client with persisted keys and key-change warning. Suite 6/6 PASS.
 
 ## Next step
-Frontend redesign together with step 4 (B): persisted keys, key-change warning, verify flow, honest wording.
-A static clickable preview (`frontend/web/preview.html`) is shown to the user for approval before the real wiring.
+Step 5 (C): Telegram bot + Mini App + initData check (`prompts/05-telegram.md`). Reuse `frontend/shared/ui.css` and `crypto.js`.
 
 ## Known issues
-- In-memory rate limiter resets on restart; behind cloudflared all users share one IP (the per-username login limit still protects accounts).
-- Keys are regenerated on every login until step B.
+- In-memory rate limiter resets on restart; behind cloudflared all users share one IP (per-username login limit still protects accounts).
+- Keys live in one browser. Signing in on another browser makes new keys (with a warning), and contacts see "key changed".
+- Sensitive messages not opened before a reload are lost on this device (they still expire on the server).
 
 ## Ideas / later
 - (none yet)

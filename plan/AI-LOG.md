@@ -2,6 +2,17 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: feat: redesigned v2 client with persisted keys and key-change warning (Claude Code)
+- **Did:** built a clickable design preview first; the user approved it. Then: `frontend/shared/ui.css` (design system),
+  new `frontend/web/index.html` + `app.css` + `js/{app,chat,vault,api,dom}.js` (old `app.js`/`style.css` removed),
+  `crypto.js` additions (`sealLocal`/`openLocal` XChaCha20-Poly1305, `exportKeys`/`importKeys`) and honest comments,
+  trust-on-first-use in the web client and in `attacks/client_sim.py`, real server-side key swap in `test_mitm_key_swap.py`,
+  landing page `frontend/landing/index.html` served at `/`, wording fixes in README/PROTOCOL/THREAT_MODEL, frontend docs.
+- **Verified:** suite 6/6 PASS; the MITM test fails with TOFU disabled ("undetected") and passes with it. Node round-trip test
+  of sealLocal/openLocal (wrong password rejected). Playwright + Edge two-user run, 8 steps, no console errors.
+  Screenshots checked for light, dark and phone width.
+- **Human check needed:** two browsers on `/v2/`, the key-change flow with a private window, and the home page at `/`.
+
 ## 2026-11-27: feat: argon2id login, sessions and access control (Claude Code)
 - **Did:** new `backend/app/auth.py` (Argon2id via PyNaCl, dummy-hash timing equaliser, token_urlsafe sessions stored as SHA-256,
   `require_user`, in-memory rate limiter). `database.py`: `password_hash` column migration, `sessions` table, TTL now a `?` parameter.

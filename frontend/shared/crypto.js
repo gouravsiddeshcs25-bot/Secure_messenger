@@ -10,14 +10,17 @@
  * 4. Out-of-band Verification: Deterministic safety number / fingerprint computed over
  *    lexicographically ordered public identity keys.
  *    - WHY: Alice and Bob can compare fingerprints over a voice/in-person channel to detect MITM key swaps.
- * 5. Forward Secrecy & Per-Message Keys: Key Derivation Function (crypto_kdf_derive_from_key).
- *    - WHY: Each message uses an isolated 256-bit key derived from the shared secret + counter.
- *      Even if one message key leaks, past and future messages cannot be decrypted.
+ * 5. Per-Message Keys: Key Derivation Function (crypto_kdf_derive_from_key).
+ *    - WHY: Each message uses its own 256-bit key derived from the shared secret + counter, so one leaked
+ *      message key does not reveal other message keys.
+ *    - LIMIT: every message key comes from the same shared secret. Anyone who steals that secret (or a private
+ *      key) can derive all of them. This is NOT forward secrecy; a Double Ratchet would add that (future work).
  * 6. Authenticated Encryption: ChaCha20-Poly1305 IETF (crypto_aead_chacha20poly1305_ietf).
  *    - WHY: Provides 256-bit encryption with a 128-bit authentication tag covering both ciphertext
  *      and message header (associated data). Any server or network tampering immediately fails decryption.
- * 7. Passphrase Re-Authentication: Argon2id (crypto_pwhash).
- *    - WHY: Memory-hard hashing algorithm that defends against GPU/ASIC brute-forcing on local devices.
+ * 7. Local key storage: Argon2id (crypto_pwhash) turns the password into a storage key, and
+ *    XChaCha20-Poly1305 encrypts private keys and chat history before they go into localStorage.
+ *    - WHY: Memory-hard hashing slows down GPU brute-forcing if someone copies the browser's storage.
  * 8. Zeroization: libsodium.memzero() immediately clears sensitive key material from memory.
  */
 
@@ -139,8 +142,8 @@ const Crypto = {
      * Derives a dedicated 256-bit per-message key from the master shared secret.
      * Uses libsodium's BLAKE2b-based KDF with an 8-character context string and counter.
      * 
-     * WHY: Guarantees forward secrecy. Compromise of message key N does not expose
-     * message key N-1 or N+1.
+     * WHY: Each message gets its own key. Leaking message key N does not expose key N-1 or N+1
+     * (but leaking the shared secret exposes all of them; see the header comment).
      */
     deriveMessageKey(sharedSecret, counter) {
         const s = this.sodium;
@@ -159,7 +162,8 @@ const Crypto = {
      */
     encryptEnvelope(myIdentityPrivKey, messageKey, plaintextStr, headerObj) {
         const s = this.sodium;
-        // Generate random 24-byte IETF nonce
+        // Random 12-byte nonce (crypto_aead_chacha20poly1305_ietf_NPUBBYTES = 12).
+        // Every message also has its own key, so a nonce is never reused with the same key.
         const nonce = s.randombytes_buf(s.crypto_aead_chacha20poly1305_ietf_NPUBBYTES);
         const headerBytes = s.from_string(JSON.stringify(headerObj));
         const plaintextBytes = s.from_string(plaintextStr);
@@ -240,6 +244,55 @@ const Crypto = {
         return {
             key: key,
             saltB64: this.toBase64(salt)
+        };
+    },
+
+    /**
+     * Encrypts a JS object for storage on this device (localStorage).
+     * XChaCha20-Poly1305 with a random 24-byte nonce; the fixed associated data ties it to this app.
+     * Returns { n, c } (base64). Only this ciphertext ever goes into storage.
+     */
+    sealLocal(storageKey, obj) {
+        const s = this.sodium;
+        const nonce = s.randombytes_buf(s.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+        const ct = s.crypto_aead_xchacha20poly1305_ietf_encrypt(
+            s.from_string(JSON.stringify(obj)), s.from_string("sm2-local-v1"), null, nonce, storageKey
+        );
+        return { n: this.toBase64(nonce), c: this.toBase64(ct) };
+    },
+
+    /**
+     * Opens what sealLocal() stored. Throws if the key is wrong or the data was changed.
+     */
+    openLocal(storageKey, sealed) {
+        const s = this.sodium;
+        const pt = s.crypto_aead_xchacha20poly1305_ietf_decrypt(
+            null, this.fromBase64(sealed.c), s.from_string("sm2-local-v1"), this.fromBase64(sealed.n), storageKey
+        );
+        return JSON.parse(s.to_string(pt));
+    },
+
+    /**
+     * Turns a key bundle from generateUserKeys() into plain base64 fields (to be sealed with sealLocal).
+     */
+    exportKeys(keys) {
+        return {
+            idPub: keys.identity.publicKeyB64,
+            idPriv: this.toBase64(keys.identity.privateKey),
+            exPub: keys.exchange.publicKeyB64,
+            exPriv: this.toBase64(keys.exchange.privateKey),
+            sig: keys.keySignatureB64
+        };
+    },
+
+    /**
+     * The reverse of exportKeys(): rebuilds the same structure generateUserKeys() returns.
+     */
+    importKeys(o) {
+        return {
+            identity: { publicKey: this.fromBase64(o.idPub), privateKey: this.fromBase64(o.idPriv), publicKeyB64: o.idPub },
+            exchange: { publicKey: this.fromBase64(o.exPub), privateKey: this.fromBase64(o.exPriv), publicKeyB64: o.exPub },
+            keySignatureB64: o.sig
         };
     },
 

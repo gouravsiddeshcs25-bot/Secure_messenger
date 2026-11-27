@@ -3,106 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messenger v2 (Hardened Zero-Knowledge Client)</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Secure Messenger</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232550c0'/%3E%3Crect x='10' y='15' width='12' height='9' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M12.5 15v-2.5a3.5 3.5 0 0 1 7 0V15' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/shared/ui.css">
+    <link rel="stylesheet" href="app.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="badge-v2">HARDENED: CLIENT v2 (SECURE)</div>
-            <h1>Secure Messenger v2</h1>
-            <p class="subtitle">End-to-End Encrypted (X25519 + ChaCha20-Poly1305), Ed25519 Auth, Replay Protected, Ephemeral.</p>
-        </header>
+    <!-- Icon sprite: one stroke width, one 24px grid. Used through <use href="#i-name">. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+        <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path class="check-path" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M4 4l16 16M10 6a9.6 9.6 0 0 1 2-.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.4 7.6A16 16 0 0 0 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1"/></symbol>
+        <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z"/><path d="M11.5 13.5L20 4"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+        <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+        <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-3 2-5 3.5-7 .5 2 1.5 3 3 3.5C12 8 12.5 5.5 14.5 3c.5 3 4 5.5 4 10 0 4.5-2.6 8-6.5 8z"/></symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+    </svg>
 
-        <!-- Login / User Selection -->
-        <div class="card login-card" id="loginSection">
-            <h3>Sign up or log in</h3>
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                Your password is checked by the server (stored only as an Argon2id hash). After login, this browser generates your identity (Ed25519) and key exchange (X25519) keys. Private keys never leave this browser.
-            </p>
-            <div class="input-row">
-                <input type="text" id="usernameInput" placeholder="Username (a-z, 0-9, _ or -)" autocomplete="username" />
-                <input type="password" id="userPassphraseInput" placeholder="Password (8+ characters)" autocomplete="current-password" />
-                <button id="loginBtn" class="btn btn-primary">Log in</button>
-                <button id="registerBtn" class="btn btn-primary">Register</button>
-            </div>
-            <div id="cryptoInitStatus" style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
-                Initializing local libsodium crypto module...
-            </div>
+    <!-- ================= Sign in ================= -->
+    <main class="screen" id="authScreen">
+        <div class="auth">
+            <section class="auth-form">
+                <a class="brand" href="/"><span class="brand-mark"><svg class="icon"><use href="#i-lock"/></svg></span>Secure Messenger</a>
+                <h1 id="authTitle">Sign in</h1>
+                <p class="lede">Messages are locked on your device before they leave it.</p>
+
+                <div class="segmented" role="tablist" id="authTabs" data-index="0">
+                    <span class="thumb"></span>
+                    <button role="tab" type="button" aria-selected="true" data-mode="login">Sign in</button>
+                    <button role="tab" type="button" aria-selected="false" data-mode="register">Create account</button>
+                </div>
+
+                <form id="authForm" novalidate>
+                    <div class="field" id="userField">
+                        <label for="username">Username</label>
+                        <input class="input" id="username" autocomplete="username" spellcheck="false" autocapitalize="none" placeholder="e.g. alice">
+                        <div class="field-hint">Lowercase letters, numbers, _ or -</div>
+                    </div>
+                    <div class="field" id="passField">
+                        <label for="password">Password</label>
+                        <div class="input-wrap">
+                            <input class="input" id="password" type="password" autocomplete="current-password">
+                            <button type="button" class="icon-btn" id="showPass" aria-label="Show password"><svg class="icon"><use href="#i-eye"/></svg></button>
+                        </div>
+                        <div class="field-hint">At least 8 characters</div>
+                    </div>
+                    <div class="banner banner-danger" id="formError" role="alert" hidden></div>
+                    <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Sign in</button>
+                    <p class="field-hint" id="cryptoStatus">Loading the encryption library…</p>
+                </form>
+
+                <ol class="steps" id="authSteps" hidden></ol>
+                <p class="auth-foot">The server stores only an Argon2id hash of your password, never the password itself.</p>
+            </section>
+
+            <aside class="explain" aria-label="What end-to-end encryption means">
+                <h2>One message, two views</h2>
+                <div class="view">
+                    <div class="view-head"><svg class="icon icon-sm"><use href="#i-unlock"/></svg>What Bob reads</div>
+                    <p class="sample">Meet at the library at 6</p>
+                </div>
+                <div class="view view-server">
+                    <div class="view-head"><svg class="icon icon-sm"><use href="#i-lock"/></svg>What our server stores</div>
+                    <p class="cipher" id="explainCipher">{"nonce":"q9Lw0Ct3x8bYk1Rm","ciphertext":"Hj2Vb8+Qw4pXz0LmN7tRc1KaYe5sDf3uG9iO","signature":"mP4n…"}</p>
+                </div>
+                <p class="limits">The server still sees who talks to whom and when. It never sees what you say.</p>
+            </aside>
         </div>
+    </main>
 
-        <!-- Chat App Section (Hidden until logged in) -->
-        <div class="card chat-card" id="chatSection" style="display: none;">
-            <div class="chat-header">
+    <!-- ================= App ================= -->
+    <div class="screen shell" id="appScreen" hidden>
+        <aside class="sidebar">
+            <div class="me">
+                <span class="avatar" id="meAvatar"></span>
+                <span class="me-name" id="meName"></span>
+                <button class="icon-btn" id="themeBtn" aria-label="Switch light or dark theme"><svg class="icon"><use href="#i-moon"/></svg></button>
+                <button class="icon-btn" id="logoutBtn" aria-label="Sign out"><svg class="icon"><use href="#i-logout"/></svg></button>
+            </div>
+            <div class="search">
+                <svg class="icon"><use href="#i-search"/></svg>
+                <input class="input" id="search" placeholder="Start a chat by username" autocomplete="off" spellcheck="false" aria-label="Start a chat by username">
+                <div class="search-results" id="searchResults" hidden></div>
+            </div>
+            <nav class="chat-list" id="chatList" aria-label="Chats"></nav>
+            <div class="sidebar-foot"><span class="live-dot" id="liveDot"></span><span id="liveText">Checking for new messages</span></div>
+        </aside>
+
+        <section class="convo" id="convo">
+            <div class="empty-convo" id="convoEmpty">
                 <div>
-                    Logged in as: <strong id="currentUserDisplay" class="highlight-user"></strong>
-                    <button id="logoutBtn" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px; margin-left: 8px;">Log out</button>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <label for="recipientInput">Recipient:</label>
-                    <input type="text" id="recipientInput" placeholder="Peer username (e.g. bob)" style="width: 140px; padding: 6px 10px;" />
-                    <button id="connectPeerBtn" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">Connect</button>
+                    <svg class="icon icon-lg"><use href="#i-chat"/></svg>
+                    <h2>Pick a chat</h2>
+                    <p>Or search for a username on the left to start a new one.</p>
                 </div>
             </div>
 
-            <!-- Fingerprint Verification Panel -->
-            <div class="fingerprint-panel" id="fingerprintPanel" style="display: none;">
-                <div>
-                    <div class="fp-title">Out-of-Band Safety Number (Compare with Peer):</div>
-                    <div class="fp-code" id="fingerprintCode">---- ---- ---- ---- ---- ----</div>
-                </div>
-                <div class="fp-status" id="fingerprintStatus">
-                    ✓ Exchange Key Signature Verified
-                </div>
+            <div class="convo-main" id="convoMain" hidden>
+                <header class="convo-head">
+                    <button class="icon-btn back-btn" id="backBtn" aria-label="Back to chats"><svg class="icon"><use href="#i-back"/></svg></button>
+                    <span class="avatar" id="peerAvatar"></span>
+                    <div class="who"><strong id="peerName"></strong><span>End-to-end encrypted</span></div>
+                    <button class="chip chip-warn" id="trustChip" aria-label="Safety number"><svg class="icon icon-sm"><use href="#i-shield"/></svg><span>Not verified</span></button>
+                </header>
+                <div class="banner-slot" id="bannerSlot"></div>
+                <div class="thread" id="thread" aria-live="polite"></div>
+                <footer class="composer" id="composer">
+                    <div class="dlp" id="dlp" hidden><svg class="icon icon-sm"><use href="#i-alert"/></svg><span id="dlpText"></span></div>
+                    <div class="options" id="options" hidden>
+                        <span>Disappears after</span>
+                        <span class="chips" id="ttlChips">
+                            <button type="button" data-ttl="30" aria-pressed="false">30 s</button>
+                            <button type="button" data-ttl="60" aria-pressed="true">1 min</button>
+                            <button type="button" data-ttl="300" aria-pressed="false">5 min</button>
+                        </span>
+                        <label class="check"><input type="checkbox" id="oneTime" checked>View once</label>
+                        <label class="check"><input type="checkbox" id="askPass">Ask for password to open</label>
+                    </div>
+                    <div class="compose-row">
+                        <div class="compose-box">
+                            <button type="button" class="toggle-sensitive" id="sensitiveBtn" aria-pressed="false"><svg class="icon icon-sm"><use href="#i-clock"/></svg>Sensitive</button>
+                            <textarea id="text" rows="1" placeholder="Write a message" aria-label="Message"></textarea>
+                        </div>
+                        <button class="btn btn-primary send-btn" id="sendBtn" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
+                    </div>
+                </footer>
             </div>
-
-            <!-- Messages Log -->
-            <div class="messages-container" id="messagesContainer">
-                <div class="empty-state">No encrypted messages yet. Connect with a recipient to begin!</div>
-            </div>
-
-            <!-- DLP Warning Banner -->
-            <div class="dlp-warning-banner" id="dlpWarning">
-                ⚠️ <strong>DLP Alert:</strong> <span id="dlpReason"></span>. Sensitive Mode forced automatically.
-            </div>
-
-            <!-- Controls Panel -->
-            <div class="controls-panel">
-                <div class="control-item">
-                    <input type="checkbox" id="sensitiveToggle" />
-                    <label for="sensitiveToggle"><strong>Sensitive Mode</strong></label>
-                </div>
-                <div class="control-item">
-                    <label for="ttlSelect">Expiry (TTL):</label>
-                    <select id="ttlSelect">
-                        <option value="30">30 seconds</option>
-                        <option value="60" selected>60 seconds</option>
-                        <option value="300">5 minutes</option>
-                    </select>
-                </div>
-                <div class="control-item">
-                    <input type="checkbox" id="oneTimeViewCheck" checked />
-                    <label for="oneTimeViewCheck">One-time view (burn on read)</label>
-                </div>
-                <div class="control-item">
-                    <input type="checkbox" id="requirePassphraseCheck" />
-                    <label for="requirePassphraseCheck">Require recipient passphrase</label>
-                </div>
-            </div>
-
-            <!-- Input area -->
-            <div class="chat-input-area">
-                <textarea id="messageInput" placeholder="Type a sensitive message (E2EE protected)..."></textarea>
-                <button id="sendBtn" class="btn btn-send-secure">Send (E2EE)</button>
-            </div>
-            <div id="statusMessage" class="status-indicator">Polling active (2s interval)...</div>
-        </div>
+        </section>
     </div>
 
-    <!-- Vendor and App Scripts -->
+    <!-- Safety number -->
+    <dialog class="dialog" id="safetyDialog">
+        <div class="dialog-body">
+            <h2 id="safetyTitle">Verify</h2>
+            <p id="safetyText"></p>
+            <div class="safety" id="safetyNumber"></div>
+        </div>
+        <div class="dialog-actions">
+            <button class="btn btn-quiet" id="safetyLater">Not now</button>
+            <button class="btn btn-primary" id="safetyConfirm">Numbers match</button>
+        </div>
+    </dialog>
+
+    <!-- How a message was protected -->
+    <dialog class="dialog" id="protectDialog">
+        <div class="dialog-body">
+            <h2>How this message was protected</h2>
+            <dl class="facts" id="protectFacts"></dl>
+            <div>
+                <p class="small-label">Exactly what went through the server:</p>
+                <pre class="wire cipher" id="protectWire"></pre>
+            </div>
+        </div>
+        <div class="dialog-actions"><button class="btn btn-quiet" id="protectClose">Close</button></div>
+    </dialog>
+
+    <!-- Password check for sensitive messages -->
+    <dialog class="dialog" id="passDialog">
+        <form class="dialog-body" id="passForm">
+            <h2>Enter your password</h2>
+            <p>The sender asked for a password check before this message opens.</p>
+            <div class="field">
+                <input class="input" type="password" id="passInput" aria-label="Password" autocomplete="current-password">
+                <div class="field-hint" id="passHint"></div>
+            </div>
+        </form>
+        <div class="dialog-actions">
+            <button class="btn btn-quiet" id="passCancel">Cancel</button>
+            <button class="btn btn-primary" id="passOk">Open message</button>
+        </div>
+    </dialog>
+
+    <!-- Generic confirm -->
+    <dialog class="dialog" id="confirmDialog">
+        <div class="dialog-body">
+            <h2 id="confirmTitle"></h2>
+            <p id="confirmText"></p>
+        </div>
+        <div class="dialog-actions">
+            <button class="btn btn-quiet" id="confirmCancel">Cancel</button>
+            <button class="btn btn-primary" id="confirmOk">Continue</button>
+        </div>
+    </dialog>
+
+    <div class="toasts" id="toasts" aria-live="assertive"></div>
+
+    <!-- Order matters: libsodium, then the shared crypto and DLP modules, then the app. -->
     <script src="/shared/vendor/libsodium.js"></script>
     <script src="/shared/crypto.js"></script>
     <script src="/shared/dlp.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

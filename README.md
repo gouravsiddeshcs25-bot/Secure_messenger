@@ -28,7 +28,7 @@ Most modern messaging applications protect data in transit (via TLS) and end-to-
 - Recipients can retain, screenshot, or leak confidential credentials.
 - Lost or stolen unlocked devices expose long-term private keys and histories.
 
-**Secure Messenger v2** enforces a zero-knowledge architecture where the server cannot decrypt messages, keys are ratcheted per-message for forward secrecy, and sensitive messages self-destruct upon reading or expiration.
+**Secure Messenger v2** enforces a zero-knowledge architecture where the server cannot decrypt messages, every message gets its own key derived from a shared secret and a counter, and sensitive messages self-destruct upon reading or expiration.
 
 ---
 
@@ -50,7 +50,7 @@ Detailed cryptographic formulas and packet diagrams are in [docs/PROTOCOL.md](do
 All cryptographic primitives are provided client-side by **libsodium** (`libsodium-wrappers-sumo` bundled locally in `frontend/shared/vendor/libsodium.js` without any external CDN dependencies):
 - **Identity & Signatures**: `Ed25519` (`crypto_sign`)
 - **Key Exchange**: `X25519` Diffie-Hellman (`crypto_scalarmult`)
-- **Per-Message Key Ratchet (Forward Secrecy)**: `BLAKE2b`-based KDF (`crypto_kdf_derive_from_key`)
+- **Per-Message Keys** (not forward secrecy: all keys come from one shared secret): `BLAKE2b`-based KDF (`crypto_kdf_derive_from_key`)
 - **Authenticated Encryption with Associated Data**: `ChaCha20-Poly1305 (IETF)` (`crypto_aead_chacha20poly1305_ietf`)
 - **Out-of-Band Fingerprint**: 24-digit formatted Safety Number derived via `crypto_generichash` over lexicographically sorted public keys
 - **Local Passphrase Protection**: `Argon2id` (`crypto_pwhash`) memory-hard key derivation
@@ -71,7 +71,7 @@ All cryptographic primitives are provided client-side by **libsodium** (`libsodi
 secure_messenger/
 ├── docs/
 │   ├── THREAT_MODEL.md         # Adversaries, boundaries, and security choices
-│   ├── PROTOCOL.md             # Cryptographic handshake, KDF ratchet, and wire specs
+│   ├── PROTOCOL.md             # Cryptographic handshake, per-message key derivation, and wire specs
 │   └── RESULTS.md              # Attack lab verification results matrix
 ├── backend/
 │   ├── CLAUDE.md               # Backend-only rules
@@ -208,7 +208,7 @@ In cybersecurity, stating boundaries honestly is critical:
    - Injecting recipient-specific invisible Unicode characters (such as Zero-Width Spaces `\u200B`, Zero-Width Non-Joiners `\u200C`, and Word Joiners `\u2060`) into sensitive plaintext before rendering.
    - If a recipient leaks the text via copy-paste or screenshots OCR, the extracted zero-width binary signature identifies the exact leaking recipient handle.
 2. **Double-Ratchet Key Agreement**:
-   - Upgrading from single-ratchet KDF to the full Signal Double-Ratchet protocol (combining asymmetric DH ratchet with symmetric KDF chains) for post-compromise security.
+   - Upgrading from per-message keys (one shared secret + counter) to the full Signal Double-Ratchet protocol (combining asymmetric DH ratchet with symmetric KDF chains) for post-compromise security.
 3. **Post-Quantum Cryptography (PQ-KEM)**:
    - Integrating hybrid post-quantum key encapsulation (e.g. ML-KEM / Kyber768 + X25519) to guard against "Store Now, Decrypt Later" adversaries with future quantum hardware.
 4. **Encrypted Metadata**:

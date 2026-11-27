@@ -6,7 +6,7 @@ This report records the automated attack tests executed against **Client v1** (N
 
 | Attack | v1 Expected | v1 Actual | v2 Expected | v2 Actual | Result |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| MITM swaps keys | succeeds silently | succeeds silently | caught by fingerprint check | caught by fingerprint check | **✅ PASS** |
+| MITM swaps keys | succeeds silently | succeeds silently | key change detected | key change detected | **✅ PASS** |
 | Replay captured message | accepted twice | accepted twice | rejected | rejected | **✅ PASS** |
 | Tamper with ciphertext | altered text shown | altered text shown | auth tag fails | auth tag fails | **✅ PASS** |
 | Dump server database | plaintext readable | plaintext readable | only ciphertext | only ciphertext | **✅ PASS** |
@@ -19,7 +19,7 @@ This report records the automated attack tests executed against **Client v1** (N
 
 ### Attack 1: Man-In-The-Middle (MITM) Key Swap
 - **Client v1 Result**: `succeeds silently`. Because Client v1 lacks public-key cryptographic binding, an attacker can register a handle or substitute endpoints without alerting either user.
-- **Client v2 Defense**: `caught by fingerprint check`. Client v2 generates permanent Ed25519 identity keypairs that sign X25519 exchange keys. Alice and Bob calculate a deterministic out-of-band safety number (SHA-256 / BLAKE2b fingerprint over sorted public identity keys). Any rogue key swap causes fingerprint mismatch and drops communication.
+- **Client v2 Defense**: `key change detected`. In this test the server itself swaps Bob's public keys for Mallory's after Alice has already talked to Bob. Mallory's keys carry a valid signature, so a signature check alone would not notice. Client v2 remembers the first identity key it saw for each contact (trust on first use), raises `KEY_CHANGED`, and refuses to encrypt anything to the new key until the user compares the safety number again (the safety number is a BLAKE2b hash of both identity keys).
 
 ### Attack 2: Replay Captured Message
 - **Client v1 Result**: `accepted twice`. Client v1 does not maintain monotonic counters or nonces. Re-posting an intercepted ciphertext causes it to be rendered again in the UI.

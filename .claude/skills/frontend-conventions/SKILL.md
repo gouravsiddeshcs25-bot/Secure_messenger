@@ -16,8 +16,8 @@ description: Conventions for frontend/ in Secure Messenger, covering the v2 web 
 1. Plain browser JS with no build step and no CDN. libsodium is the local bundle in `frontend/shared/vendor/`.
 2. Load shared code with absolute paths: `<script src="/shared/vendor/libsodium.js">`, then `/shared/crypto.js`, then `/shared/dlp.js`,
    then the page's own `app.js`. The order matters.
-3. **No `innerHTML` with dynamic data** in v2 or the Mini App. Use `textContent` and `createElement`. guard.mjs blocks it.
-   (The current `frontend/web/app.js` has several of these. Removing them is part of step 4.)
+3. **No `innerHTML` with dynamic data** in v2 or the Mini App. Use `el()` from `frontend/web/js/dom.js` (textContent only). guard.mjs blocks it.
+   v2 is ES modules in `frontend/web/js/`; shared styles and tokens are in `frontend/shared/ui.css` (light + dark).
 4. Crypto only through `frontend/shared/crypto.js`. If you change its API, `attacks/crypto_helper.js` must still work.
    Run the suite.
 5. DLP patterns live in `frontend/shared/dlp.js`. Test strings must be obviously fake and must not match guard's real-token patterns.

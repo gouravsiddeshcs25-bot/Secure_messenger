@@ -18,6 +18,21 @@ HELPER_JS = os.path.join(os.path.dirname(__file__), "crypto_helper.js")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.environ.get("MESSENGER_DB_PATH", os.path.join(REPO_ROOT, "backend", "data", "messenger.db"))
 
+def malicious_server_swap_keys(username: str, keys: Dict[str, Any]):
+    """
+    Simulates a malicious or hacked server: it overwrites a user's public keys in its own database,
+    hoping clients will encrypt to the attacker's keys instead.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE public_keys SET identity_pubkey = ?, exchange_pubkey = ?, key_signature = ? WHERE username = ?",
+                (keys["identity_pub"], keys["exchange_pub"], keys["key_signature"], username),
+            )
+    finally:
+        conn.close()
+
 def read_db_messages():
     """
     Simulates a database breach: the attacker has a copy of the server's SQLite file.
@@ -97,6 +112,9 @@ class ClientV2:
         self.received_messages: List[str] = []
         self.security_alerts: List[str] = []
         self.password = secrets.token_urlsafe(16)
+        # Trust on first use: the identity key we saw the first time we talked to each peer.
+        self.known_identities: Dict[str, str] = {}
+        self.blocked_peers: set = set()
         self.token: Optional[str] = None
 
     def auth_headers(self) -> Dict[str, str]:
@@ -136,6 +154,15 @@ class ClientV2:
         })
         fingerprint = fp_res["fingerprint"]
 
+        # 3. Trust on first use: same rule as the web client. A different identity key for a known peer
+        #    means "key changed": raise an alert and stop sending until a human re-verifies.
+        known = self.known_identities.get(peer_username)
+        if known is None:
+            self.known_identities[peer_username] = peer_data["identity_pubkey"]
+        elif known != peer_data["identity_pubkey"]:
+            self.security_alerts.append(f"KEY_CHANGED: identity key for {peer_username} is different from the first one seen")
+            self.blocked_peers.add(peer_username)
+
         self.peer_cache[peer_username] = {
             "identity_pubkey": peer_data["identity_pubkey"],
             "exchange_pubkey": peer_data["exchange_pubkey"],
@@ -145,9 +172,11 @@ class ClientV2:
         }
         return sig_valid, fingerprint
 
-    def send_message(self, recipient: str, text: str, is_sensitive: bool = False, ttl: int = 60) -> int:
+    def send_message(self, recipient: str, text: str, is_sensitive: bool = False, ttl: int = 60) -> Optional[int]:
         if recipient not in self.peer_cache:
             self.connect_peer(recipient)
+        if recipient in self.blocked_peers:
+            return None  # key changed: refuse to encrypt to a key we have not verified
         peer = self.peer_cache[recipient]
 
         self.out_counters[recipient] = self.out_counters.get(recipient, 0) + 1

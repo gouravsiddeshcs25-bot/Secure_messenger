@@ -27,7 +27,7 @@ This project implements a secure messenger for sensitive communication where:
 2. **Integrity & Tamper Detection**: Authenticated Encryption with Associated Data (AEAD) ensures that any bit flip or alteration by the network or server causes decryption to fail.
 3. **Authentication**: All messages and key announcements are cryptographically bound to the sender's long-term Ed25519 identity key.
 4. **Replay Protection**: Messages include monotonically increasing session counters and timestamps; duplicate or out-of-order counter replays are rejected.
-5. **Forward Secrecy**: Per-message keys are derived from the master shared secret combined with ratcheted message counters using HKDF-style key derivation (`crypto_kdf`). Compromise of an individual message key does not reveal past or future messages.
+5. **Per-Message Keys**: Each message key is derived from the shared secret and the message counter (`crypto_kdf`). Leaking one message key does not reveal the others, but leaking the shared secret or a private key reveals the whole conversation. This is not forward secrecy; a Double Ratchet is future work.
 6. **Controlled Ephemerality & Revocation**: Sensitive messages carry an explicit time-to-live (TTL) and one-time view flags. Keys are wiped from client memory immediately upon display, and servers purge expired records.
 
 ---
@@ -38,7 +38,7 @@ All cryptographic operations are performed strictly client-side using **libsodiu
 - **Identity & Signatures**: `Ed25519` (`crypto_sign`) for permanent user identity keys and message integrity signatures.
 - **Key Exchange**: `X25519` (`crypto_kx` / `crypto_scalarmult`) for ephemeral and shared secret agreement.
 - **Symmetric Encryption**: `ChaCha20-Poly1305` (`crypto_aead_chacha20poly1305_ietf`) providing high-performance 256-bit encryption with a 128-bit authentication tag.
-- **Key Derivation (KDF)**: `crypto_kdf_derive_from_key` (BLAKE2b-based HKDF equivalent) to derive unique, non-reversible per-message encryption keys from the ratcheted shared secret.
+- **Key Derivation (KDF)**: `crypto_kdf_derive_from_key` (BLAKE2b-based HKDF equivalent) to derive unique, non-reversible per-message encryption keys from the shared secret and the message counter.
 - **Passphrase Re-Authentication**: `Argon2id` (`crypto_pwhash`) for memory-hard key derivation to unlock sensitive messages locally on the device.
 
 ---

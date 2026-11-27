@@ -17,6 +17,7 @@
   sensitive reveal/burn, key change blocks sending, accept and deliver again. No console errors.
 
 ## Last checkpoint
+- 2026-11-27 · `upgrades` · fix: two-tab message loss + landing polish. Suite 6/6 PASS.
 - 2026-11-27 · `upgrades` · feat: redesigned v2 client with persisted keys and key-change warning. Suite 6/6 PASS.
 
 ## Next step
@@ -26,6 +27,7 @@ Step 5 (C): Telegram bot + Mini App + initData check (`prompts/05-telegram.md`).
 - In-memory rate limiter resets on restart; behind cloudflared all users share one IP (per-username login limit still protects accounts).
 - Keys live in one browser. Signing in on another browser makes new keys (with a warning), and contacts see "key changed".
 - Sensitive messages not opened before a reload are lost on this device (they still expire on the server).
+- Only one tab per account at a time: opening a second tab signs the first one out (by design, keeps the vault consistent).
 
 ## Ideas / later
 - (none yet)

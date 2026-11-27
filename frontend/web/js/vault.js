@@ -17,6 +17,12 @@ let record = null;
 let state = null;
 let user = null;
 let saveTimer = null;
+let myRev = 0;               // version of the stored vault this tab last read or wrote
+let onConflict = () => {};
+
+// Called when another tab has written a newer copy of this vault. This tab must stop writing,
+// otherwise it would overwrite newer chats with its older copy.
+export function whenConflict(fn) { onConflict = fn; }
 
 function emptyState() {
     return { contacts: {}, out: {}, seen: {}, processed: [], history: {}, unread: {} };
@@ -41,7 +47,9 @@ export function create(username, password, keys) {
     storageKey = key;
     user = username;
     state = emptyState();
-    record = { v: 1, salt: saltB64, keys: Crypto.sealLocal(key, Crypto.exportKeys(keys)), data: null };
+    const existing = read(username);
+    myRev = existing ? (existing.rev || 0) : 0;
+    record = { v: 1, rev: myRev, salt: saltB64, keys: Crypto.sealLocal(key, Crypto.exportKeys(keys)), data: null };
     saveNow();
 }
 
@@ -60,6 +68,7 @@ export function unlock(username, password) {
     storageKey = key;
     record = rec;
     user = username;
+    myRev = rec.rev || 0;
     try {
         state = Object.assign(emptyState(), rec.data ? Crypto.openLocal(key, rec.data) : {});
     } catch (e) {
@@ -102,20 +111,39 @@ export function save() {
     saveTimer = setTimeout(saveNow, 250);
 }
 
+// Writes the vault now. Returns true only if it really reached storage.
+// Refuses to write if another tab saved a newer version since this tab last read it.
 function saveNow() {
-    if (!storageKey || !record) return;
+    if (!storageKey || !record) return false;
+    const stored = read(user);
+    if (stored && (stored.rev || 0) !== myRev) {
+        const handler = onConflict;
+        onConflict = () => {};          // report a conflict only once
+        handler();
+        return false;
+    }
+    record.rev = myRev + 1;
     record.data = Crypto.sealLocal(storageKey, state);
     try {
         localStorage.setItem(PREFIX + user, JSON.stringify(record));
+        myRev = record.rev;
+        return true;
     } catch (e) {
         console.warn("Could not save the vault (storage full or blocked).");
+        return false;
     }
 }
 
-// Sign out: write the last changes, then forget the key and data in memory.
-export function lock() {
+// Save right away (used before deleting a message from the server, so it is never lost).
+export function flush() {
     clearTimeout(saveTimer);
-    saveNow();
+    return saveNow();
+}
+
+// Sign out: write the last changes (unless told not to), then forget the key and data in memory.
+export function lock(options) {
+    clearTimeout(saveTimer);
+    if (!options || options.save !== false) saveNow();
     Crypto.scrub(storageKey);
     storageKey = null;
     record = null;

@@ -8,6 +8,23 @@ import * as vault from "./vault.js";
 import * as chat from "./chat.js";
 
 let mode = "login";
+let signedInAs = null;
+
+// One active tab per account. Each tab keeps its own copy of the vault in memory; two tabs writing
+// would overwrite each other's chats. The newest tab announces itself and older tabs sign out.
+const tabId = Math.random().toString(36).slice(2); // only identifies this tab, not security-related
+let tabs = null;
+try { tabs = new BroadcastChannel("sm2-tabs"); } catch (e) { /* old browser: the vault version check still protects data */ }
+const OTHER_TAB_MESSAGE = "You opened this account in another tab, so it was signed out here to keep your chats in sync.";
+if (tabs) {
+    tabs.onmessage = (e) => {
+        const m = e.data || {};
+        if (m.type === "active" && m.user === signedInAs && m.tab !== tabId) {
+            api("/api/logout", { method: "POST" }).catch(() => {}); // end this tab's server session too
+            signOutLocal(OTHER_TAB_MESSAGE, { save: false });
+        }
+    };
+}
 
 // ---------- theme ----------
 function currentTheme() {
@@ -178,6 +195,9 @@ $("authForm").addEventListener("submit", async (e) => {
         const keys = mode === "register" ? await signUp(username, password) : await signIn(username, password);
         $("password").value = "";
         resetForm();
+        signedInAs = username;
+        if (tabs) tabs.postMessage({ type: "active", user: username, tab: tabId });
+        vault.whenConflict(() => signOutLocal(OTHER_TAB_MESSAGE, { save: false }));
         show("appScreen");
         chat.start(username, keys);
         toast(mode === "register" ? "Account created. Your keys are locked on this device." : "Signed in as " + username);
@@ -190,9 +210,11 @@ $("authForm").addEventListener("submit", async (e) => {
 });
 
 // ---------- sign out ----------
-function signOutLocal(message) {
+function signOutLocal(message, options) {
+    if (!signedInAs && !message) return;
+    signedInAs = null;
     chat.stop();
-    vault.lock();
+    vault.lock(options);
     setToken(null);
     $("appScreen").classList.remove("chat-open");
     show("authScreen");

@@ -197,7 +197,8 @@ async function confirmSafety() {
 // ======================================================================
 function chatNames() {
     const d = vault.data();
-    const names = new Set([...Object.keys(d.history), ...Object.keys(liveSecrets)]);
+    // Include contacts with unread or held messages (e.g. waiting for a key review), even with no history yet.
+    const names = new Set([...Object.keys(d.history), ...Object.keys(liveSecrets), ...Object.keys(d.unread)]);
     if (current) names.add(current);
     return [...names].sort((a, b) => lastTs(b) - lastTs(a));
 }
@@ -498,10 +499,11 @@ function deleteFromServer(m) {
     api(`/api/messages/${m.id}`, { method: "DELETE" }).catch(() => {});
 }
 
+// Store first, delete second: the server copy is removed only after the message is safely
+// written to this device. If saving fails, the message stays on the server and is tried again.
 function done(m, id) {
     vault.markProcessed(id);
-    vault.save();
-    deleteFromServer(m);
+    if (vault.flush()) deleteFromServer(m);
 }
 
 async function handleIncoming(m, id) {
@@ -562,7 +564,7 @@ async function handleIncoming(m, id) {
         vault.data().seen[sender] = header.counter;
         vault.addHistory(sender, { dir: "in", sensitive: true, ts: header.timestamp });
         vault.markProcessed(id);
-        vault.save();
+        if (!vault.flush()) return;
         addSecretCard(sender, m, header, plaintext);
         return;
     }

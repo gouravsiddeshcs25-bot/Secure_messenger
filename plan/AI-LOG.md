@@ -2,6 +2,17 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: fix: messages lost with the same account open in two tabs; landing polish (Claude Code)
+- **Bug (reported by the user):** a message sent to `harshitt` never showed up. The DB showed it had been delivered and deleted,
+  and `harshitt` had overlapping sessions. Reproduced with Playwright: tab B received and stored the message and deleted it from the
+  server; the older tab A still had its stale vault in memory and overwrote it on its next save (opening a chat).
+- **Fix:** `vault.js` keeps a version number and refuses to overwrite a newer copy (the stale tab signs out instead);
+  `chat.js` writes the message to the vault *before* deleting it from the server; `app.js` uses a BroadcastChannel so the newest
+  tab for an account wins and older tabs sign out (and end their server session). Chats with held/unread messages now show in the list.
+- **Landing:** header links, tighter headline, "How a message travels" 4-step sequence.
+- **Verified:** suite 6/6 PASS; two-user browser run (8 steps) with no console errors; the two-tab repro now keeps the message,
+  also with BroadcastChannel disabled (version check alone).
+
 ## 2026-11-27: feat: redesigned v2 client with persisted keys and key-change warning (Claude Code)
 - **Did:** built a clickable design preview first; the user approved it. Then: `frontend/shared/ui.css` (design system),
   new `frontend/web/index.html` + `app.css` + `js/{app,chat,vault,api,dom}.js` (old `app.js`/`style.css` removed),

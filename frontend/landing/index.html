@@ -9,12 +9,26 @@
     <style>
         .page { max-width: 1040px; margin: 0 auto; padding: 24px 24px 64px; }
         .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .nav { display: flex; align-items: center; gap: 4px; }
+        .nav a.link { color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 10px; border-radius: var(--r-sm); }
+        .nav a.link:hover { color: var(--ink); background: var(--surface-2); }
+
+        /* How a message travels: a real 4-step sequence, so it is numbered */
+        .flow { list-style: none; margin: 28px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: step; }
+        .flow li { position: relative; padding: 0 20px 0 0; display: grid; gap: 6px; align-content: start; }
+        .flow li::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+                           background: var(--surface); border: 1px solid var(--line-strong); font-size: 13px; font-weight: 700; color: var(--ink-2); position: relative; z-index: 1; margin-bottom: 8px; }
+        .flow li::after { content: ""; position: absolute; top: 14px; left: 28px; right: 0; height: 1px; background: var(--line-strong); }
+        .flow li:last-child::after { display: none; }
+        .flow li.server::before { background: var(--surface-2); border-style: dashed; }
+        .flow strong { font-size: 15px; }
+        .flow span { font-size: 14px; color: var(--ink-2); max-width: 28ch; }
         .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); text-decoration: none; }
         .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--on-accent); }
         a.btn { text-decoration: none; }
 
         .intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; padding: 72px 0 56px; }
-        .intro h1 { font-size: clamp(32px, 4.4vw, 46px); line-height: 1.08; letter-spacing: -0.02em; max-width: 13ch; }
+        .intro h1 { font-size: clamp(32px, 4.2vw, 48px); line-height: 1.06; letter-spacing: -0.025em; max-width: 15ch; }
         .intro p { margin-top: 18px; font-size: 17px; color: var(--ink-2); max-width: 46ch; }
         .intro .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
 
@@ -25,7 +39,7 @@
         .row-head .tag { margin-left: auto; font-weight: 600; font-size: 12px; padding: 2px 8px; border-radius: var(--r-pill); }
         .tag-bad { background: var(--danger-soft); color: var(--danger); }
         .tag-good { background: var(--ok-soft); color: var(--ok); }
-        .row .cipher { color: var(--ink); line-height: 1.6; min-height: 3.2em; }
+        .row .cipher { color: var(--ink); font-size: 13px; line-height: 1.65; min-height: 3.3em; }
         .row.v1 .cipher mark { background: var(--danger-soft); color: var(--danger); border-radius: 3px; padding: 0 2px; }
         .caption { font-size: 13px; color: var(--ink-3); }
 
@@ -54,6 +68,11 @@
         @media (max-width: 820px) {
             .intro { grid-template-columns: 1fr; gap: 32px; padding: 40px 0; }
             .clients { grid-template-columns: 1fr; }
+            .flow { grid-template-columns: 1fr; gap: 18px; }
+            .flow li { grid-template-columns: 28px 1fr; column-gap: 14px; padding: 0; }
+            .flow li::before { grid-row: span 2; margin: 0; }
+            .flow li::after { display: none; }
+            .nav a.link { display: none; }
         }
         @media (max-width: 480px) { .page { padding: 16px 16px 48px; } .top .btn-quiet { display: none; } }
     </style>
@@ -62,10 +81,12 @@
 <div class="page">
     <header class="top">
         <a class="brand" href="/"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>Secure Messenger</a>
-        <div style="display:flex;gap:8px">
-            <a class="btn btn-quiet" href="/v1/">Insecure client</a>
-            <a class="btn btn-primary" href="/v2/">Open the messenger</a>
-        </div>
+        <nav class="nav" aria-label="Page">
+            <a class="link" href="#how">How it works</a>
+            <a class="link" href="#attacks">Attack results</a>
+            <a class="link" href="#limits">Limits</a>
+            <a class="btn btn-primary" href="/v2/" style="margin-left:8px">Open the messenger</a>
+        </nav>
     </header>
 
     <div class="intro">
@@ -91,6 +112,17 @@
             <p class="caption">Same message, same server. Only the second one is safe if the database leaks.</p>
         </div>
     </div>
+
+    <section id="how">
+        <h2>How a message travels</h2>
+        <p>Your words only exist in readable form on the two screens at the ends.</p>
+        <ol class="flow">
+            <li><strong>Keys stay with you</strong><span>Your browser makes your keys and locks them with your password. Only the public half is shared.</span></li>
+            <li><strong>Locked before sending</strong><span>Each message gets its own key, a tamper-check tag and your signature.</span></li>
+            <li class="server"><strong>The server relays it</strong><span>It stores ciphertext it has no key for, then deletes it once delivered.</span></li>
+            <li><strong>Checked, then opened</strong><span>The receiver checks the signature, the tag and the message number before showing anything.</span></li>
+        </ol>
+    </section>
 
     <section>
         <h2>Two clients, one server</h2>
@@ -137,7 +169,7 @@
         </div>
     </section>
 
-    <section>
+    <section id="limits">
         <h2>What it doesn't protect</h2>
         <ul class="limits">
             <li>The server still sees who talks to whom, when, and how long each message is.</li>

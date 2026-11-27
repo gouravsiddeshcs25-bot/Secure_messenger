@@ -70,4 +70,6 @@ Run `python attacks\run_all_attacks.py`, or show the result you ran before. Poin
 | No internet at all | Skip part 4: show the web parts on `127.0.0.1` (they don't need the internet), and the printed RESULTS.md. |
 | Port 8000 already in use | An old server is still running. Close that terminal, or restart the laptop's terminal windows, then start again. |
 | Attack suite shows a FAIL for the dump endpoint | `LAB_MODE=1` is set in `secrets\.env`. Remove it and restart. |
+| Black screen / endless loading in Telegram | You tapped an old button with a dead tunnel address. Send `/start` to the bot and use the new button (or the menu button). |
+| Mini App asks to create a new PIN | The tunnel address changed, and the phone keeps the keys per address. Create a PIN (new keys), then in the web app accept the key change for your Telegram account and compare safety numbers again. To avoid it: don't restart `run_demo.py` between the rehearsal and the presentation. |
 | Phone layout looks old | Close Telegram fully and reopen it (it keeps an old copy). |

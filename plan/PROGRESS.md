@@ -38,7 +38,9 @@ a screen recording as backup, print `docs/RESULTS.md`. After the presentation: s
 - In-memory rate limiter resets on restart; behind cloudflared all users share one IP (per-username login limit still protects accounts).
 - Keys live in one browser. Signing in on another browser makes new keys (with a warning), and contacts see "key changed".
 - Sensitive messages not opened before a reload are lost on this device (they still expire on the server).
-- The cloudflared quick-tunnel address changes on every restart; then `MINIAPP_URL` must be updated and the bot restarted.
+- The cloudflared quick-tunnel address changes on every restart (`run_demo.py` passes the new one to the bot). Browser storage is
+  per address, so the Mini App on the phone loses its vault and asks for a new PIN = new keys; contacts see "key changed".
+  Real fix: a fixed address (own domain + named tunnel, or the public deployment in step 9).
   QUIC (UDP) is blocked on the user's network: use `--protocol http2`.
 - A copied initData string works for up to 1 hour (documented in THREAT_MODEL).
 - Only one tab per account at a time: opening a second tab signs the first one out (by design, keeps the vault consistent).

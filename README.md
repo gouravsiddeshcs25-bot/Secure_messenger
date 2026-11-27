@@ -107,6 +107,8 @@ secure_messenger/
 │   ├── test_unauthorized_access.py # Broken access control (IDOR, brute force)
 │   ├── test_telegram_auth.py   # Forged / expired / edited Telegram initData
 │   ├── test_telegram_view.py   # What Telegram's servers can read
+│   ├── test_session_theft.py   # Logged-out, expired, made-up or stolen session tokens
+│   ├── test_xss.py             # Script injection through a username or message
 │   └── run_all_attacks.py      # Unified runner outputting PASS/FAIL table
 ├── contracts/                  # API.md + examples: the frontend/backend handshake
 ├── plan/                       # PLAN, TASKS, PROGRESS, DECISIONS, LESSONS, AI-LOG
@@ -216,6 +218,8 @@ Open expired message       | still readable     | still readable     | key gone,
 Unauthorized access        | all succeed        | all succeed        | blocked (401/403/404/429)    | blocked (401/403/404/429)    | ✅ PASS
 Forged Telegram login      | any name accepted  | any name accepted  | forged login rejected        | forged login rejected        | ✅ PASS
 Telegram reads the chat    | Telegram reads it  | Telegram reads it  | only ciphertext, tamper caught | only ciphertext, tamper caught | ✅ PASS
+Reuse old/stolen session   | no session needed  | no session needed  | old/stolen token refused     | old/stolen token refused     | ✅ PASS
+Script injection (XSS)     | script runs        | script runs        | shown as text                | shown as text                | ✅ PASS
 ----------------------------------------------------------------------------------------
 ```
 Detailed technical explanations are preserved in [docs/RESULTS.md](docs/RESULTS.md).

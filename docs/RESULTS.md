@@ -14,6 +14,8 @@ This report records the automated attack tests executed against **Client v1** (N
 | Unauthorized access | all succeed | all succeed | blocked (401/403/404/429) | blocked (401/403/404/429) | **✅ PASS** |
 | Forged Telegram login | any name accepted | any name accepted | forged login rejected | forged login rejected | **✅ PASS** |
 | Telegram reads the chat | Telegram reads it | Telegram reads it | only ciphertext, tamper caught | only ciphertext, tamper caught | **✅ PASS** |
+| Reuse old/stolen session | no session needed | no session needed | old/stolen token refused | old/stolen token refused | **✅ PASS** |
+| Script injection (XSS) | script runs | script runs | shown as text | shown as text | **✅ PASS** |
 
 ---
 
@@ -50,3 +52,11 @@ This report records the automated attack tests executed against **Client v1** (N
 ### Attack 8: Telegram Reads the Chat
 - **Client v1 Result**: `Telegram reads it`. Normal Telegram chats are not end-to-end encrypted, so plain text pasted there is readable on Telegram's servers.
 - **Client v2 Defense**: `only ciphertext, tamper caught`. CipherBridge seals the message as a `🔒SM2:` text (the signed v2 envelope with `channel: telegram`). The text Telegram stores has no plaintext; Mallory's keys can't open it; a changed character or header fails the Poly1305 tag and the Ed25519 signature; and opening the same copy twice is refused as a replay. Telegram still sees who is in the chat and when (metadata).
+
+### Attack 9: Reuse an Old or Stolen Session
+- **Client v1 Result**: `no session needed`. v1 has no sessions: anyone reads Bob's inbox just by putting his name in the URL.
+- **Client v2 Defense**: `old/stolen token refused`. A token stops working the moment Bob logs out and once it expires (checked on every request). The database keeps only a SHA-256 hash of each token, so a stolen copy of the sessions table gives Mallory nothing she can log in with; sending the hash itself is refused. A made-up token is refused. The lab dump endpoint answers 404 unless the server was started with `LAB_MODE=1`.
+
+### Attack 10: Script Injection (XSS)
+- **Client v1 Result**: `script runs`. v1 accepts any sender name, so Mallory calls herself `<img src=x onerror=alert(1)>`, and the v1 page draws the sender with `innerHTML`, which runs her script in the victim's page.
+- **Client v2 Defense**: `shown as text`. v2 usernames may only contain a-z, 0-9, `_` and `-`, so HTML names are refused at sign-up. An HTML message arrives as exactly the characters that were typed. The test also scans every v2 and Mini App page script and finds no HTML sink (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`): all text goes on the page with `textContent`. This is a check of the code, not a run in a real browser.

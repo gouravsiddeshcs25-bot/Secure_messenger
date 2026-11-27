@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Cybersecurity Skill Lab Attack Runner.
-Executes all 8 attack vectors against Client v1 and Client v2,
+Executes all 10 attack vectors against Client v1 and Client v2,
 prints a comparison matrix, and saves results into docs/RESULTS.md.
 """
 
@@ -29,6 +29,8 @@ import test_expired_message
 import test_unauthorized_access
 import test_telegram_auth
 import test_telegram_view
+import test_session_theft
+import test_xss
 
 SERVER_URL = os.environ.get("SERVER_BASE", "http://127.0.0.1:8000")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -73,7 +75,9 @@ def run_suite():
         test_expired_message,
         test_unauthorized_access,
         test_telegram_auth,
-        test_telegram_view
+        test_telegram_view,
+        test_session_theft,
+        test_xss
     ]
 
     results = []
@@ -152,6 +156,14 @@ def write_results_markdown(results):
         f.write("\n### Attack 8: Telegram Reads the Chat\n")
         f.write("- **Client v1 Result**: `Telegram reads it`. Normal Telegram chats are not end-to-end encrypted, so plain text pasted there is readable on Telegram's servers.\n")
         f.write("- **Client v2 Defense**: `only ciphertext, tamper caught`. CipherBridge seals the message as a `🔒SM2:` text (the signed v2 envelope with `channel: telegram`). The text Telegram stores has no plaintext; Mallory's keys can't open it; a changed character or header fails the Poly1305 tag and the Ed25519 signature; and opening the same copy twice is refused as a replay. Telegram still sees who is in the chat and when (metadata).\n")
+
+        f.write("\n### Attack 9: Reuse an Old or Stolen Session\n")
+        f.write("- **Client v1 Result**: `no session needed`. v1 has no sessions: anyone reads Bob's inbox just by putting his name in the URL.\n")
+        f.write("- **Client v2 Defense**: `old/stolen token refused`. A token stops working the moment Bob logs out and once it expires (checked on every request). The database keeps only a SHA-256 hash of each token, so a stolen copy of the sessions table gives Mallory nothing she can log in with; sending the hash itself is refused. A made-up token is refused. The lab dump endpoint answers 404 unless the server was started with `LAB_MODE=1`.\n")
+
+        f.write("\n### Attack 10: Script Injection (XSS)\n")
+        f.write("- **Client v1 Result**: `script runs`. v1 accepts any sender name, so Mallory calls herself `<img src=x onerror=alert(1)>`, and the v1 page draws the sender with `innerHTML`, which runs her script in the victim's page.\n")
+        f.write("- **Client v2 Defense**: `shown as text`. v2 usernames may only contain a-z, 0-9, `_` and `-`, so HTML names are refused at sign-up. An HTML message arrives as exactly the characters that were typed. The test also scans every v2 and Mini App page script and finds no HTML sink (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`): all text goes on the page with `textContent`. This is a check of the code, not a run in a real browser.\n")
 
     print(f"\n📄 Results successfully recorded to {RESULTS_PATH}")
 

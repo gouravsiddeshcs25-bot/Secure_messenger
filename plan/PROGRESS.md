@@ -16,11 +16,14 @@
   Mini App at `/tg/` = the v2 client signed in through Telegram with a PIN. "Seal for Telegram" / "Open a 🔒SM2 message" in both apps.
   Real run: sealed in the Mini App, sent through WhatsApp, opened in the web app as another user; safety numbers matched.
 - Phone layout fixed (chat no longer runs off the right edge; checked at 320/360/412 px).
-- Attack suite: **8/8 PASS** (added Forged Telegram login, Telegram reads the chat). Earlier: 6/6. MITM test now does a real server-side key swap after first contact.
+- Step 6 done: attack suite **10/10 PASS**. New: Reuse old/stolen session (`test_session_theft.py`: logout, expiry, made-up token,
+  stolen hash, dump endpoint locked) and Script injection (`test_xss.py`: HTML names refused, no HTML sinks in v2/Mini App code;
+  a code check, not a real-browser run). IDOR and brute force were already in `test_unauthorized_access.py`. Earlier: 8/8. MITM test now does a real server-side key swap after first contact.
 - Browser end-to-end check (Playwright + Edge, two users): register, chat both ways, verify, reload keeps history,
   sensitive reveal/burn, key change blocks sending, accept and deliver again. No console errors.
 
 ## Last checkpoint
+- 2026-11-27 · `upgrades` · feat: new attack tests (session reuse, XSS). Suite 10/10 PASS.
 - 2026-11-27 · `upgrades` · step 5 ticked after the phone check, phone layout fix. Suite 8/8 PASS.
 - 2026-11-27 · `upgrades` · feat: CipherBridge Telegram bot and Mini App. Suite 8/8 PASS (step 5 not ticked until tested in real Telegram).
 - 2026-11-27 · `upgrades` · fix: two-tab message loss + landing polish. Suite 6/6 PASS.

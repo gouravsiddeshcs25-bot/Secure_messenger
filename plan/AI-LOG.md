@@ -2,6 +2,14 @@
 
 What the AI did, which files it touched, and what was verified. Newest first.
 
+## 2026-11-27: feat: new attack tests (Claude Code)
+- `attacks/test_session_theft.py`: v1 reads an inbox with no session; v2 refuses a logged-out token, an expired one (expiry moved
+  into the past in the SQLite file), a made-up one and the stored SHA-256 hash; checks the DB holds no raw token; dump endpoint 404.
+- `attacks/test_xss.py`: v1 stores an `<img onerror>` sender name and draws it with innerHTML (script runs); v2 refuses HTML
+  usernames, an HTML message arrives as plain text, and no HTML sink exists in v2/Mini App/landing code (static scan).
+  Checked that adding an innerHTML line to `frontend/web/js` turns the test red.
+- Runner, RESULTS commentary and README updated. Suite 10/10 PASS on a test server with its own database.
+
 ## 2026-11-27: step 5 checked on a real phone, phone layout fix (Claude Code)
 - **User check:** bot created with BotFather (inline mode on), tunnel via `cloudflared --protocol http2` (QUIC blocked on their
   network), Mini App opened in Telegram, safety numbers matched between the Mini App and the web app, a sealed message sent through

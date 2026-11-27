@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Cybersecurity Skill Lab Attack Runner.
-Executes all 5 attack vectors against Client v1 and Client v2,
+Executes all 10 attack vectors against Client v1 and Client v2,
 prints a comparison matrix, and saves results into docs/RESULTS.md.
 """
 
@@ -11,6 +11,13 @@ import time
 import subprocess
 import requests
 
+# Windows consoles default to cp1252, which cannot print the emoji in the report
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Ensure attacks directory is in sys.path
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -19,13 +26,19 @@ import test_replay_attack
 import test_tamper_ciphertext
 import test_database_dump
 import test_expired_message
+import test_unauthorized_access
+import test_telegram_auth
+import test_telegram_view
+import test_session_theft
+import test_xss
 
 SERVER_URL = os.environ.get("SERVER_BASE", "http://127.0.0.1:8000")
-RESULTS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "RESULTS.md")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_PATH = os.path.join(REPO_ROOT, "docs", "RESULTS.md")
 
 def ensure_server_running():
     try:
-        r = requests.get(f"{SERVER_URL}/api/users", timeout=1)
+        r = requests.get(f"{SERVER_URL}/", timeout=1)
         if r.ok:
             return None
     except Exception:
@@ -33,14 +46,15 @@ def ensure_server_running():
     
     print("Starting background server for attack suite...")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "server.app:app", "--host", "127.0.0.1", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "backend.app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+        cwd=REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
     for _ in range(15):
         time.sleep(0.5)
         try:
-            r = requests.get(f"{SERVER_URL}/api/users", timeout=1)
+            r = requests.get(f"{SERVER_URL}/", timeout=1)
             if r.ok:
                 return proc
         except Exception:
@@ -58,7 +72,12 @@ def run_suite():
         test_replay_attack,
         test_tamper_ciphertext,
         test_database_dump,
-        test_expired_message
+        test_expired_message,
+        test_unauthorized_access,
+        test_telegram_auth,
+        test_telegram_view,
+        test_session_theft,
+        test_xss
     ]
 
     results = []
@@ -94,7 +113,7 @@ def run_suite():
 
 def write_results_markdown(results):
     os.makedirs(os.path.dirname(RESULTS_PATH), exist_ok=True)
-    with open(RESULTS_PATH, "w") as f:
+    with open(RESULTS_PATH, "w", encoding="utf-8") as f:
         f.write("# Cybersecurity Skill Lab Attack Verification Results\n\n")
         f.write("This report records the automated attack tests executed against **Client v1** (Naive Insecure) and **Client v2** (Hardened Zero-Knowledge E2EE).\n\n")
         f.write("## 1. Attack Verification Matrix\n\n")
@@ -108,7 +127,7 @@ def write_results_markdown(results):
         f.write("## 2. Attack Analysis & Technical Findings\n\n")
         f.write("### Attack 1: Man-In-The-Middle (MITM) Key Swap\n")
         f.write("- **Client v1 Result**: `succeeds silently`. Because Client v1 lacks public-key cryptographic binding, an attacker can register a handle or substitute endpoints without alerting either user.\n")
-        f.write("- **Client v2 Defense**: `caught by fingerprint check`. Client v2 generates permanent Ed25519 identity keypairs that sign X25519 exchange keys. Alice and Bob calculate a deterministic out-of-band safety number (SHA-256 / BLAKE2b fingerprint over sorted public identity keys). Any rogue key swap causes fingerprint mismatch and drops communication.\n\n")
+        f.write("- **Client v2 Defense**: `key change detected`. In this test the server itself swaps Bob's public keys for Mallory's after Alice has already talked to Bob. Mallory's keys carry a valid signature, so a signature check alone would not notice. Client v2 remembers the first identity key it saw for each contact (trust on first use), raises `KEY_CHANGED`, and refuses to encrypt anything to the new key until the user compares the safety number again (the safety number is a BLAKE2b hash of both identity keys).\n\n")
 
         f.write("### Attack 2: Replay Captured Message\n")
         f.write("- **Client v1 Result**: `accepted twice`. Client v1 does not maintain monotonic counters or nonces. Re-posting an intercepted ciphertext causes it to be rendered again in the UI.\n")
@@ -124,7 +143,27 @@ def write_results_markdown(results):
 
         f.write("### Attack 5: Open Expired Message\n")
         f.write("- **Client v1 Result**: `still readable`. Messages persist forever in the database.\n")
-        f.write("- **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.\n")
+        f.write("- **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.\n\n")
+
+        f.write("### Attack 6: Unauthorized Access\n")
+        f.write("- **Client v1 Result**: `all succeed`. The v1 API (`/api/v1/...`) has no login, so Mallory can read Bob's inbox, send a message as Alice and delete Bob's messages.\n")
+        f.write("- **Client v2 Defense**: `blocked (401/403/404/429)`. Every v2 call needs a session token (Argon2id password login, token stored only as a SHA-256 hash, 24h expiry). The server takes the user from the token, so Mallory can't overwrite Bob's keys, read his inbox (403), send as Alice or delete his messages (404). Six wrong passwords in a minute get HTTP 429, and logout ends the session.\n")
+
+        f.write("\n### Attack 7: Forged Telegram Login\n")
+        f.write("- **Client v1 Result**: `any name accepted`. v1 has no login, so Mallory just uses the victim's name and sends messages as them.\n")
+        f.write("- **Client v2 Defense**: `forged login rejected`. The Mini App sends Telegram's signed `initData` to `/api/tg/auth`. The server recomputes Telegram's HMAC-SHA256 (secret key = HMAC-SHA256 of the bot token keyed with `WebAppData`) over the sorted fields and compares it in constant time. A made-up hash, a missing hash, a user id changed after signing, a repeated field, and data older than one hour are all refused. Names starting with `tg_` can't be registered or used with a password, so the only way into a Telegram account is a genuine Telegram signature. The test signs with its own made-up bot token, never the real one.\n")
+
+        f.write("\n### Attack 8: Telegram Reads the Chat\n")
+        f.write("- **Client v1 Result**: `Telegram reads it`. Normal Telegram chats are not end-to-end encrypted, so plain text pasted there is readable on Telegram's servers.\n")
+        f.write("- **Client v2 Defense**: `only ciphertext, tamper caught`. CipherBridge seals the message as a `🔒SM2:` text (the signed v2 envelope with `channel: telegram`). The text Telegram stores has no plaintext; Mallory's keys can't open it; a changed character or header fails the Poly1305 tag and the Ed25519 signature; and opening the same copy twice is refused as a replay. Telegram still sees who is in the chat and when (metadata).\n")
+
+        f.write("\n### Attack 9: Reuse an Old or Stolen Session\n")
+        f.write("- **Client v1 Result**: `no session needed`. v1 has no sessions: anyone reads Bob's inbox just by putting his name in the URL.\n")
+        f.write("- **Client v2 Defense**: `old/stolen token refused`. A token stops working the moment Bob logs out and once it expires (checked on every request). The database keeps only a SHA-256 hash of each token, so a stolen copy of the sessions table gives Mallory nothing she can log in with; sending the hash itself is refused. A made-up token is refused. The lab dump endpoint answers 404 unless the server was started with `LAB_MODE=1`.\n")
+
+        f.write("\n### Attack 10: Script Injection (XSS)\n")
+        f.write("- **Client v1 Result**: `script runs`. v1 accepts any sender name, so Mallory calls herself `<img src=x onerror=alert(1)>`, and the v1 page draws the sender with `innerHTML`, which runs her script in the victim's page.\n")
+        f.write("- **Client v2 Defense**: `shown as text`. v2 usernames may only contain a-z, 0-9, `_` and `-`, so HTML names are refused at sign-up. An HTML message arrives as exactly the characters that were typed. The test also scans every v2 and Mini App page script and finds no HTML sink (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`): all text goes on the page with `textContent`. This is a check of the code, not a run in a real browser.\n")
 
     print(f"\n📄 Results successfully recorded to {RESULTS_PATH}")
 

@@ -11,7 +11,7 @@ attempting to alter the communication without being detected.
 import uuid
 import requests
 import json
-from client_sim import ClientV1, ClientV2, SERVER_BASE
+from client_sim import ClientV1, ClientV2, SERVER_BASE, read_db_messages
 
 def test_v1_tamper():
     """Client v1 has NO MAC or AEAD integrity verification: displays modified text."""
@@ -36,7 +36,7 @@ def test_v1_tamper():
     })
     
     # Send tampered payload directly
-    requests.post(f"{SERVER_BASE}/api/messages", json={
+    requests.post(f"{SERVER_BASE}/api/v1/messages", json={
         "sender": alice_name,
         "recipient": bob_name,
         "payload": tampered_payload,
@@ -70,8 +70,7 @@ def test_v2_tamper():
     msg_id = alice.send_message(bob_name, "Approved budget: $1,000")
     
     # 2. Attacker retrieves the raw envelope
-    resp = requests.get(f"{SERVER_BASE}/api/dump/messages")
-    stored = resp.json()["stored_messages"]
+    stored = read_db_messages()
     original_envelope = [json.loads(m["payload"]) for m in stored if m["id"] == msg_id][-1]
     
     # 3. Attacker tampers with the ciphertext (flips bits)
@@ -84,8 +83,9 @@ def test_v2_tamper():
     # Inject tampered message with next counter
     tampered_envelope["header"]["counter"] = 2
     
-    requests.post(f"{SERVER_BASE}/api/messages", json={
-        "sender": alice_name,
+    # Worst case: the attacker re-sends with Alice's captured token, so the server accepts it.
+    # Only the AEAD tag and signature check on Bob's side can catch the change.
+    requests.post(f"{SERVER_BASE}/api/messages", headers=alice.auth_headers(), json={
         "recipient": bob_name,
         "payload": json.dumps(tampered_envelope),
         "is_sensitive": False

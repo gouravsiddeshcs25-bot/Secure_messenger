@@ -11,7 +11,7 @@ to trick the recipient into processing it again.
 import uuid
 import requests
 import json
-from client_sim import ClientV1, ClientV2, SERVER_BASE
+from client_sim import ClientV1, ClientV2, SERVER_BASE, read_db_messages
 
 def test_v1_replay():
     """Client v1 has NO replay counters or nonces: accepts duplicate messages."""
@@ -32,7 +32,7 @@ def test_v1_replay():
     
     # 3. Attacker captures the message payload and replays it to the server
     captured_payload = bob.raw_messages[-1]["payload"]
-    requests.post(f"{SERVER_BASE}/api/messages", json={
+    requests.post(f"{SERVER_BASE}/api/v1/messages", json={
         "sender": alice_name,
         "recipient": bob_name,
         "payload": captured_payload,
@@ -72,14 +72,13 @@ def test_v2_replay():
     msgs1 = bob.poll_messages()
     assert len(msgs1) == 1, f"Bob should have received exactly 1 message, got {len(msgs1)}"
     
-    # 3. Attacker captures ciphertext envelope from the server and replays it
-    resp = requests.get(f"{SERVER_BASE}/api/dump/messages")
-    stored = resp.json()["stored_messages"]
+    # 3. Attacker captures the ciphertext envelope (here: from a stolen copy of the database)
+    stored = read_db_messages()
     replayed_payload = [m["payload"] for m in stored if m["sender"] == alice_name][-1]
     
-    # Replay identical envelope (counter = 1)
-    requests.post(f"{SERVER_BASE}/api/messages", json={
-        "sender": alice_name,
+    # Replay identical envelope (counter = 1). Worst case: the attacker captured Alice's whole HTTP
+    # request, including her Bearer token, so the server accepts it. The client's counter check must catch it.
+    requests.post(f"{SERVER_BASE}/api/messages", headers=alice.auth_headers(), json={
         "recipient": bob_name,
         "payload": replayed_payload,
         "is_sensitive": False

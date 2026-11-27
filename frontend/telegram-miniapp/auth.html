@@ -1,0 +1,36 @@
+    <!-- ================= Sign in (Telegram) ================= -->
+    <!-- This block replaces the web sign-in screen. scripts/build_miniapp.py copies it into index.html. -->
+    <main class="screen" id="authScreen">
+        <div class="tg-auth">
+            <span class="brand-mark tg-mark"><svg class="icon"><use href="#i-lock"/></svg></span>
+            <h1 id="tgTitle">CipherBridge</h1>
+            <p class="lede" id="tgLede">End-to-end encrypted messages inside Telegram. Telegram only carries scrambled text.</p>
+
+            <ol class="steps" id="authSteps" hidden></ol>
+
+            <form id="pinForm" novalidate hidden>
+                <div class="field" id="pinField">
+                    <label for="pin" id="pinLabel">Your PIN</label>
+                    <input class="input pin" id="pin" type="password" inputmode="numeric" autocomplete="off" spellcheck="false">
+                    <div class="field-hint" id="pinHint">At least 6 characters</div>
+                </div>
+                <div class="field" id="pin2Field" hidden>
+                    <label for="pin2">Type it again</label>
+                    <input class="input pin" id="pin2" type="password" inputmode="numeric" autocomplete="off" spellcheck="false">
+                    <div class="field-hint">Telegram never sees it. If you forget it, you'll need new keys.</div>
+                </div>
+                <button class="btn btn-primary btn-block" id="pinSubmit" type="submit">Unlock</button>
+                <button class="btn btn-quiet btn-block" id="forgotPin" type="button" hidden>Forgot your PIN?</button>
+            </form>
+
+            <div class="banner banner-danger" id="formError" role="alert" hidden></div>
+
+            <div class="tg-outside" id="notInTelegram" hidden>
+                <p>This page signs you in with Telegram, so open it from the CipherBridge bot in the Telegram app.</p>
+                <p>On a computer, the web messenger does the same job and can open 🔒SM2 messages too.</p>
+                <a class="btn btn-primary" href="/v2/">Open the web messenger</a>
+            </div>
+
+            <p class="auth-foot">Your PIN locks your private keys on this device. It never leaves it.</p>
+        </div>
+    </main>

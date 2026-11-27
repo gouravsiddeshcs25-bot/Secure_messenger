@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/keys",
+    "headers": { "Authorization": "Bearer <session token from /api/login>" },
+    "body": {
+      "identity_pubkey": "<base64 Ed25519 public key>",
+      "exchange_pubkey": "<base64 X25519 public key>",
+      "key_signature": "<base64 Ed25519 signature over exchange_pubkey>"
+    }
+  },
+  "response": { "status": 200, "body": { "status": "ok", "message": "Keys registered successfully" } },
+  "note": "The keys are saved under the logged-in user. There is no username in the body."
+}

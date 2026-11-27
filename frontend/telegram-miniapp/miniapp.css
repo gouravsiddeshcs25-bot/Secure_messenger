@@ -1,0 +1,25 @@
+/* CipherBridge Mini App: only what differs from the web client (/v2/app.css). */
+
+/* Telegram gives the Mini App the phone's height through this variable. */
+.shell { height: var(--tg-viewport-stable-height, 100vh); }
+
+.tg-auth {
+    min-height: var(--tg-viewport-stable-height, 100vh);
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 48px 20px 28px;
+    display: grid;
+    gap: 18px;
+    align-content: start;
+}
+.tg-mark { width: 52px; height: 52px; border-radius: 14px; }
+.tg-mark .icon { width: 26px; height: 26px; }
+.tg-auth h1 { font-size: 28px; line-height: 1.15; }
+.tg-auth .lede { color: var(--ink-2); margin-top: -8px; }
+.tg-auth form { display: grid; gap: 14px; }
+.pin { font-size: 22px; letter-spacing: 0.3em; text-align: center; font-variant-numeric: tabular-nums; }
+.tg-outside { display: grid; gap: 12px; color: var(--ink-2); }
+.tg-outside .btn { justify-self: start; }
+
+/* Telegram picks light or dark, so the app's own theme switch is hidden. */
+#themeBtn { display: none; }

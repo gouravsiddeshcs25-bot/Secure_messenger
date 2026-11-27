@@ -14,10 +14,11 @@ The system compares a **deliberately insecure baseline (Client v1)** against a *
 5. [Directory Layout](#-project-structure)
 6. [Quickstart & Setup](#-quickstart--setup)
 7. [Running the Web Clients](#-running-the-web-clients)
-8. [Data Loss Prevention (DLP) Subsystem](#-data-loss-prevention-dlp-subsystem)
-9. [Automated Attack Lab & Results](#-automated-attack-lab--results)
-10. [Honest Security Limitations](#-honest-security-limitations)
-11. [Future Work & Enhancements](#-future-work)
+8. [CipherBridge: Telegram Setup](#-cipherbridge-telegram-setup-windows)
+9. [Data Loss Prevention (DLP) Subsystem](#-data-loss-prevention-dlp-subsystem)
+10. [Automated Attack Lab & Results](#-automated-attack-lab--results)
+11. [Honest Security Limitations](#-honest-security-limitations)
+12. [Future Work](#-future-work)
 
 ---
 
@@ -28,29 +29,31 @@ Most modern messaging applications protect data in transit (via TLS) and end-to-
 - Recipients can retain, screenshot, or leak confidential credentials.
 - Lost or stolen unlocked devices expose long-term private keys and histories.
 
-**Secure Messenger v2** enforces a zero-knowledge architecture where the server cannot decrypt messages, keys are ratcheted per-message for forward secrecy, and sensitive messages self-destruct upon reading or expiration.
+**Secure Messenger v2** enforces a zero-knowledge architecture where the server cannot decrypt messages, every message gets its own key derived from a shared secret and a counter, and sensitive messages self-destruct upon reading or expiration.
 
 ---
 
 ## 🥋 Threat Model & Security Design
-Detailed specifications are documented in [docs/THREAT_MODEL.md](file:///Users/gourav/Desktop/secure_messenger/docs/THREAT_MODEL.md).
+The full table (11 adversaries, each linked to the test that checks it) is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-| Adversary | Adversary Capability | Defense in v2 |
+| Adversary | What they try | Defense in v2 |
 | :--- | :--- | :--- |
-| **1. Network Eavesdropper / MITM** | Intercepts or modifies packets in transit | End-to-end encryption with **ChaCha20-Poly1305 (AEAD)**; out-of-band **Safety Number / Fingerprint** comparison; Ed25519 identity signatures. |
-| **2. Breached or Malicious Server** | Performs full database dumps or tampers with stored records | **Zero-Knowledge Design**: The server receives only Base64 ciphertext, nonces, and public keys. Tampering invalidates the Poly1305 auth tag. |
-| **3. Hostile Recipient Leaking Data** | Attempts to retain or re-share confidential messages | **Sensitive Mode**: Enforces one-time view, auto-burn timers, server-side TTL purge, and local memory zeroization (`memzero`). |
-| **4. Stolen / Unlocked Device** | Physical or forensic memory access on device | Private keys reside only in ephemeral memory (never `localStorage`); local passphrase re-authentication via **Argon2id** (`crypto_pwhash`). |
+| **Network or server in the middle** | Swap public keys, replay or change messages | Ed25519-signed keys, trust on first use with a blocking key-change warning, safety numbers; signed counters; ChaCha20-Poly1305 tag + Ed25519 signature |
+| **Breached server / stolen database** | Read the database file | Only ciphertext, Argon2id password hashes and SHA-256 token hashes are stored |
+| **Someone without the right account** | Read, send as, or delete for another user; guess passwords; reuse old tokens | Session on every call, user taken from the token, ownership checks, login rate limit (429), logout and 24h expiry |
+| **Script injection (XSS)** | HTML/JS in a name or message | Strict username rule; all text drawn with `textContent` |
+| **Telegram** | Read or change chats; forge a Telegram login | 🔒SM2 sealed text (only ciphertext reaches Telegram); `initData` HMAC check with 1-hour limit |
+| **Stolen device** | Open browser storage | Keys and history sealed with Argon2id + XChaCha20-Poly1305 under the password (Mini App: PIN) |
 
 ---
 
 ## 🔐 Cryptographic Architecture
-Detailed cryptographic formulas and packet diagrams are in [docs/PROTOCOL.md](file:///Users/gourav/Desktop/secure_messenger/docs/PROTOCOL.md).
+Detailed cryptographic formulas and packet diagrams are in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-All cryptographic primitives are provided client-side by **libsodium** (`libsodium-wrappers-sumo` bundled locally in `client_v2/vendor/libsodium.js` without any external CDN dependencies):
+All cryptographic primitives are provided client-side by **libsodium** (`libsodium-wrappers-sumo` bundled locally in `frontend/shared/vendor/libsodium.js` without any external CDN dependencies):
 - **Identity & Signatures**: `Ed25519` (`crypto_sign`)
 - **Key Exchange**: `X25519` Diffie-Hellman (`crypto_scalarmult`)
-- **Per-Message Key Ratchet (Forward Secrecy)**: `BLAKE2b`-based KDF (`crypto_kdf_derive_from_key`)
+- **Per-Message Keys** (not forward secrecy: all keys come from one shared secret): `BLAKE2b`-based KDF (`crypto_kdf_derive_from_key`)
 - **Authenticated Encryption with Associated Data**: `ChaCha20-Poly1305 (IETF)` (`crypto_aead_chacha20poly1305_ietf`)
 - **Out-of-Band Fingerprint**: 24-digit formatted Safety Number derived via `crypto_generichash` over lexicographically sorted public keys
 - **Local Passphrase Protection**: `Argon2id` (`crypto_pwhash`) memory-hard key derivation
@@ -69,37 +72,29 @@ All cryptographic primitives are provided client-side by **libsodium** (`libsodi
 ## 📂 Project Structure
 ```text
 secure_messenger/
-├── docs/
-│   ├── THREAT_MODEL.md         # Adversaries, boundaries, and security choices
-│   ├── PROTOCOL.md             # Cryptographic handshake, KDF ratchet, and wire specs
-│   └── RESULTS.md              # Attack lab verification results matrix
-├── server/
-│   ├── app.py                  # FastAPI application & static routing
-│   ├── database.py             # SQLite schemas and lifecycle operations
-│   ├── routes.py               # REST API endpoints
-│   └── messenger.db            # SQLite database file
-├── client_v1/                  # Deliberately Insecure Client (The Attack Target)
-│   ├── index.html              # Plaintext chat UI
-│   ├── app.js                  # Vulnerable client logic (no E2EE, no replay check)
-│   └── style.css
-├── client_v2/                  # Hardened Zero-Knowledge Client
-│   ├── vendor/
-│   │   └── libsodium.js        # Local libsodium bundle (no CDN dependency)
-│   ├── crypto.js               # Client-side libsodium wrapper & primitives
-│   ├── dlp.js                  # Client-side Data Loss Prevention engine
-│   ├── app.js                  # Secure state machine & ephemeral messaging UI
-│   ├── index.html
-│   └── style.css
-├── attacks/                    # Automated Attack Scripts
-│   ├── client_sim.py           # Headless Python client framework
-│   ├── crypto_helper.js        # Node bridge to local libsodium crypto module
-│   ├── test_mitm_key_swap.py   # MITM public key substitution attack
-│   ├── test_replay_attack.py   # Message retransmission attack
-│   ├── test_tamper_ciphertext.py # Bit-flip & ciphertext corruption attack
-│   ├── test_database_dump.py   # SQL database exfiltration attack
-│   ├── test_expired_message.py # Expiration & memory scrub attack
-│   └── run_all_attacks.py      # Unified runner outputting PASS/FAIL table
-└── README.md
+├── backend/
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── main.py             # FastAPI app; serves / (landing), /v1, /v2, /tg, /shared
+│   │   ├── routes.py           # v2 API (/api/...), Telegram (/api/tg/...), insecure v1 API (/api/v1/...)
+│   │   ├── auth.py             # Argon2id passwords, sessions, require_user, rate limits
+│   │   ├── telegram_auth.py    # Telegram Mini App initData check (HMAC-SHA256)
+│   │   └── database.py         # SQLite tables and queries (? parameters only)
+│   ├── bot/bot.py              # CipherBridge Telegram bot
+│   └── data/                   # git-ignored; holds messenger.db
+├── frontend/
+│   ├── shared/                 # /shared/: crypto.js (libsodium wrapper), dlp.js, ui.css, vendor/libsodium.js
+│   ├── landing/                # / : home page
+│   ├── legacy-insecure/        # /v1/: deliberately insecure client (the attack target)
+│   ├── web/                    # /v2/: hardened client; js/ = app, chat, vault, api, dom, sm2
+│   └── telegram-miniapp/       # /tg/: the v2 client signed in through Telegram (index.html is generated)
+├── attacks/                    # 10 attack modules + run_all_attacks.py (see the table below)
+├── docs/                       # THREAT_MODEL, PROTOCOL, RESULTS, REPORT, DEMO, VIVA
+├── contracts/                  # API.md: the frontend/backend contract
+├── scripts/                    # run_demo.py, demo_seed.py, build_miniapp.py, check.ps1 / check.sh
+├── secrets/                    # git-ignored except .env.example and README.md
+├── plan/ · prompts/ · .claude/ # project plan, step prompts, Claude Code setup
+└── README.md · START-HERE.md · CLAUDE.md
 ```
 
 ---
@@ -107,17 +102,30 @@ secure_messenger/
 ## 🚀 Quickstart & Setup
 
 ### 1. Prerequisites
-- Python 3.9+ (Python 3.10 to 3.14 supported)
-- Node.js 18+ (used by the headless attack runner)
+- Python 3.10+ (tested with 3.13)
+- Node.js 18+ (the attack suite uses it to run the same crypto code as the browser)
 
-### 2. Install Dependencies
-```bash
-python3 -m pip install fastapi uvicorn requests pynacl cryptography
+### 2. Install and start (Windows PowerShell)
+```powershell
+cd Secure_Messenger
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r backend\requirements.txt
+python scripts\run_demo.py --no-telegram      # server only; or: python -m uvicorn backend.app.main:app --port 8000
 ```
 
-### 3. Start the Server
+### 2. Install and start (bash: macOS, Linux, Git Bash)
 ```bash
-python3 -m uvicorn server.app:app --host 127.0.0.1 --port 8000 --reload
+cd Secure_Messenger
+python -m venv .venv
+source .venv/bin/activate            # Git Bash on Windows: source .venv/Scripts/activate
+python -m pip install -r backend/requirements.txt
+python scripts/run_demo.py --no-telegram
+```
+
+### 3. Run the attack suite (second terminal)
+```bash
+python attacks/run_all_attacks.py    # expect 10/10 PASS
 ```
 
 ---
@@ -128,22 +136,49 @@ Open your browser to:
 - **Lab Switchboard**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Client v1 (Insecure Target)**: [http://127.0.0.1:8000/v1/](http://127.0.0.1:8000/v1/)
 - **Client v2 (Hardened E2EE)**: [http://127.0.0.1:8000/v2/](http://127.0.0.1:8000/v2/)
+- **CipherBridge Mini App** (open it from Telegram): [http://127.0.0.1:8000/tg/](http://127.0.0.1:8000/tg/)
 
 ### Walkthrough: End-to-End Encrypted Exchange in Client v2
-1. Open two browser tabs to [http://127.0.0.1:8000/v2/](http://127.0.0.1:8000/v2/).
-2. Log in as `alice` in Tab 1 and as `bob` in Tab 2.
-3. In Alice's tab, enter `bob` and click **Connect**.
-4. Observe the **Out-of-Band Safety Number (Fingerprint)**: both tabs will display the exact same 24-digit fingerprint.
-5. In Alice's tab, toggle **Sensitive Mode** (select 60s TTL). Type `"Secret server password: Passw0rd!#123"`.
-6. Click **Send (E2EE)**.
-7. In Bob's tab, notice the locked card: `[🔒 Confidential Sensitive Message from alice]`.
-8. Click **Decrypt & View**: The message decrypts in memory, the server immediately purges the record (`DELETE /api/messages/{id}`), and an auto-burn countdown begins.
+1. Open [http://127.0.0.1:8000/v2/](http://127.0.0.1:8000/v2/) in two different browsers (or a normal and a private window).
+   One account per browser: keys live in the browser that created them.
+2. **Create account** as `alice` in one and `bob` in the other. Keys are made in the browser and locked with the password.
+3. As alice, search `bob` and open the chat. Click **Not verified**: both sides show the same safety number. Compare and
+   press **Numbers match** on both.
+4. Send a message. Click the lock line under it (**Sent encrypted**) to see the counter, cipher and the exact JSON the server got.
+5. Turn on **Sensitive**, pick 30 s, **View once**, and optionally **Ask for password to open**. Bob sees a locked card,
+   reveals it, and it burns when the timer ends.
+6. Typing something like `4111 1111 1111 1111` switches Sensitive on by itself (DLP).
+
+---
+
+## 📨 CipherBridge: Telegram Setup (Windows)
+
+CipherBridge is the v2 messenger inside Telegram. Write a message, tap **Seal for Telegram**, and paste the
+`🔒SM2:...` text into any Telegram chat. Telegram only stores the scrambled text; the receiver opens it with
+**Open a 🔒SM2 message** (in the Mini App or at `/v2/`). The bot never sees readable text.
+
+1. **Create the bot.** In Telegram, open @BotFather, send `/newbot`, pick a name and a username ending in `bot`.
+   Copy the token it gives you. Also send `/setinline`, tap your bot (or type its name with `@`), and type `Seal a message`.
+2. **Install cloudflared** (gives the laptop a public https address; Telegram only opens https pages):
+   `winget install --id Cloudflare.cloudflared`, then open a new terminal.
+3. **Put the token in `secrets\.env`** (`copy secrets\.env.example secrets\.env`, then `notepad secrets\.env`):
+   `TELEGRAM_BOT_TOKEN=<token from BotFather>`. Never commit or share this file.
+4. **Start everything with one command:** `python scripts\run_demo.py`. It starts the server, the tunnel
+   (`--protocol http2`, because some networks block QUIC) and the bot, and passes the new tunnel address to the bot,
+   so you never copy it by hand. Ctrl+C stops all three.
+5. In Telegram, open your bot and press **Start**, then **Open CipherBridge**. Choose a PIN; your keys are made on the phone.
+6. To receive: forward a `🔒SM2:` message to the bot and tap **Decrypt**, or paste it into **Open a 🔒SM2 message**
+   (Mini App or `/v2/`).
+
+Manual way (three terminals): server, `cloudflared tunnel --protocol http2 --url http://localhost:8000`, then set
+`MINIAPP_URL=https://<tunnel>/tg/` in `secrets\.env` and run `python backend\bot\bot.py`. The quick-tunnel address
+changes on every cloudflared restart. Telegram (and our server) still see who talks to whom and when; only the content is hidden.
 
 ---
 
 ## 🔍 Data Loss Prevention (DLP) Subsystem
 
-Client v2 includes a pre-transmission Data Loss Prevention (DLP) engine in [client_v2/dlp.js](file:///Users/gourav/Desktop/secure_messenger/client_v2/dlp.js):
+Client v2 includes a pre-transmission Data Loss Prevention (DLP) engine in [frontend/shared/dlp.js](frontend/shared/dlp.js):
 - **Aadhaar-like 12-digit IDs**: Matches `XXXX XXXX XXXX` or contiguous digits starting with `[2-9]`.
 - **Credit Card Numbers**: Scans 13–19 digit card numbers and validates them with the **Luhn algorithm (Mod 10)**. Fake numbers or order IDs failing Luhn are ignored.
 - **API Keys & Credentials**: Detects AWS Access Keys (`AKIA...`), GitHub Tokens (`ghp_...`), OpenAI keys (`sk-...`), Slack tokens (`xox...`), private key headers, and password assignments.
@@ -160,7 +195,7 @@ The attack lab executes the identical attack vectors against both **Client v1** 
 
 ### Run the Entire Attack Suite
 ```bash
-python3 attacks/run_all_attacks.py
+python attacks/run_all_attacks.py
 ```
 
 ### Verification Matrix Output
@@ -168,23 +203,43 @@ python3 attacks/run_all_attacks.py
 ----------------------------------------------------------------------------------------
 Attack                     | v1 Expected        | v1 Actual          | v2 Expected                  | v2 Actual                    | Status
 ----------------------------------------------------------------------------------------
-MITM swaps keys            | succeeds silently  | succeeds silently  | caught by fingerprint check  | caught by fingerprint check  | ✅ PASS
+MITM swaps keys            | succeeds silently  | succeeds silently  | key change detected          | key change detected          | ✅ PASS
 Replay captured message    | accepted twice     | accepted twice     | rejected                     | rejected                     | ✅ PASS
 Tamper with ciphertext     | altered text shown | altered text shown | auth tag fails               | auth tag fails               | ✅ PASS
 Dump server database       | plaintext readable | plaintext readable | only ciphertext              | only ciphertext              | ✅ PASS
 Open expired message       | still readable     | still readable     | key gone, undecryptable      | key gone, undecryptable      | ✅ PASS
+Unauthorized access        | all succeed        | all succeed        | blocked (401/403/404/429)    | blocked (401/403/404/429)    | ✅ PASS
+Forged Telegram login      | any name accepted  | any name accepted  | forged login rejected        | forged login rejected        | ✅ PASS
+Telegram reads the chat    | Telegram reads it  | Telegram reads it  | only ciphertext, tamper caught | only ciphertext, tamper caught | ✅ PASS
+Reuse old/stolen session   | no session needed  | no session needed  | old/stolen token refused     | old/stolen token refused     | ✅ PASS
+Script injection (XSS)     | script runs        | script runs        | shown as text                | shown as text                | ✅ PASS
 ----------------------------------------------------------------------------------------
 ```
-Detailed technical explanations are preserved in [docs/RESULTS.md](file:///Users/gourav/Desktop/secure_messenger/docs/RESULTS.md).
+Detailed technical explanations are preserved in [docs/RESULTS.md](docs/RESULTS.md).
+
+### What each attack proves
+| # | Attack (file) | v1 shows | v2 proves |
+| :- | :--- | :--- | :--- |
+| 1 | MITM key swap (`test_mitm_key_swap.py`) | a swapped key goes unnoticed | a changed key is caught and sending is blocked until reviewed |
+| 2 | Replay (`test_replay_attack.py`) | the same message is accepted twice | counters stop re-sent messages |
+| 3 | Tamper (`test_tamper_ciphertext.py`) | changed text is shown | one flipped bit fails the Poly1305 tag |
+| 4 | Database dump (`test_database_dump.py`) | messages readable in the DB file | the DB holds only ciphertext |
+| 5 | Expired message (`test_expired_message.py`) | old messages stay readable | expired envelopes are gone and the key is wiped |
+| 6 | Unauthorized access (`test_unauthorized_access.py`) | anyone reads, spoofs, deletes | 401/403/404, and 429 after 5 wrong passwords |
+| 7 | Forged Telegram login (`test_telegram_auth.py`) | any name is accepted | only Telegram-signed, fresh `initData` logs in |
+| 8 | Telegram reads the chat (`test_telegram_view.py`) | Telegram can read plain text | Telegram stores only ciphertext; changes and re-opens are caught |
+| 9 | Old/stolen session (`test_session_theft.py`) | no session needed at all | logged-out, expired, made-up and DB-stolen tokens all fail |
+| 10 | Script injection (`test_xss.py`) | an HTML name runs script (innerHTML) | HTML names refused; all text drawn as text (code scan) |
 
 ---
 
 ## ⚠️ Honest Security Limitations
-
-In cybersecurity, stating boundaries honestly is critical:
-1. **Client Code Delivery**: In a browser-based web application, the server serves the JavaScript code. A compromised server could attempt to serve tampered JavaScript. (Native desktop apps with binary code signing mitigate this).
-2. **Adversarial Recipient with Modified Client**: Expiration and one-time viewing are enforced by the recipient's client runtime. A recipient who modifies their client code or attaches a debugger can extract decrypted buffers.
-3. **Display Screen Capture**: No software encryption can stop a user from photographing their physical monitor or taking an OS-level screenshot while a message is displayed.
+Full list in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5-known-limits-honest-boundary). The main ones:
+1. **No forward secrecy.** Per-message keys come from one long-term shared secret; a stolen private key plus saved ciphertext reveals old messages.
+2. **The served code is trusted.** A compromised server could send JavaScript that leaks keys (true for any web app).
+3. **Recipients can keep a copy.** Expiry and view-once run in the recipient's app; a modified app or a photo of the screen gets around them.
+4. **Metadata is visible** to our server and, for 🔒SM2 texts, to Telegram: who talks to whom, when, and message size.
+5. **Demo transport.** Locally it is plain http; through the tunnel Cloudflare is in the path. A public deployment needs HTTPS end to end.
 
 ---
 
@@ -194,7 +249,7 @@ In cybersecurity, stating boundaries honestly is critical:
    - Injecting recipient-specific invisible Unicode characters (such as Zero-Width Spaces `\u200B`, Zero-Width Non-Joiners `\u200C`, and Word Joiners `\u2060`) into sensitive plaintext before rendering.
    - If a recipient leaks the text via copy-paste or screenshots OCR, the extracted zero-width binary signature identifies the exact leaking recipient handle.
 2. **Double-Ratchet Key Agreement**:
-   - Upgrading from single-ratchet KDF to the full Signal Double-Ratchet protocol (combining asymmetric DH ratchet with symmetric KDF chains) for post-compromise security.
+   - Upgrading from per-message keys (one shared secret + counter) to the full Signal Double-Ratchet protocol (combining asymmetric DH ratchet with symmetric KDF chains) for post-compromise security.
 3. **Post-Quantum Cryptography (PQ-KEM)**:
    - Integrating hybrid post-quantum key encapsulation (e.g. ML-KEM / Kyber768 + X25519) to guard against "Store Now, Decrypt Later" adversaries with future quantum hardware.
 4. **Encrypted Metadata**:

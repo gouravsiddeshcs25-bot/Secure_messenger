@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/messages",
+    "headers": { "Authorization": "Bearer <session token from /api/login>" },
+    "body": {
+      "recipient": "bob",
+      "payload": "<base64 ciphertext envelope from frontend/shared/crypto.js>",
+      "is_sensitive": true,
+      "ttl_seconds": 60
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": { "status": "ok", "message_id": 42, "expires_at": "2026-11-27 12:01:00" }
+  },
+  "note": "The sender is taken from the session, never from the body."
+}

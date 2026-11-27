@@ -33,7 +33,7 @@ def test_v1_expired():
     time.sleep(2)
     
     # Check if Bob or an attacker can still retrieve the message
-    resp = requests.get(f"{SERVER_BASE}/api/messages/{bob_name}")
+    resp = requests.get(f"{SERVER_BASE}/api/v1/messages/{bob_name}")
     msgs = resp.json().get("messages", [])
     still_readable = any(secret in m["payload"] for m in msgs)
     
@@ -64,7 +64,7 @@ def test_v2_expired():
     time.sleep(2)
     
     # Recipient attempts to poll after expiration
-    resp = requests.get(f"{SERVER_BASE}/api/messages/{bob_name}")
+    resp = requests.get(f"{SERVER_BASE}/api/messages/{bob_name}", headers=bob.auth_headers())
     msgs = resp.json().get("messages", [])
     
     # Expired message is purged by server and cannot be decrypted

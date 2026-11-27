@@ -6,11 +6,16 @@ This report records the automated attack tests executed against **Client v1** (N
 
 | Attack | v1 Expected | v1 Actual | v2 Expected | v2 Actual | Result |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| MITM swaps keys | succeeds silently | succeeds silently | caught by fingerprint check | caught by fingerprint check | **✅ PASS** |
+| MITM swaps keys | succeeds silently | succeeds silently | key change detected | key change detected | **✅ PASS** |
 | Replay captured message | accepted twice | accepted twice | rejected | rejected | **✅ PASS** |
 | Tamper with ciphertext | altered text shown | altered text shown | auth tag fails | auth tag fails | **✅ PASS** |
 | Dump server database | plaintext readable | plaintext readable | only ciphertext | only ciphertext | **✅ PASS** |
 | Open expired message | still readable | still readable | key gone, undecryptable | key gone, undecryptable | **✅ PASS** |
+| Unauthorized access | all succeed | all succeed | blocked (401/403/404/429) | blocked (401/403/404/429) | **✅ PASS** |
+| Forged Telegram login | any name accepted | any name accepted | forged login rejected | forged login rejected | **✅ PASS** |
+| Telegram reads the chat | Telegram reads it | Telegram reads it | only ciphertext, tamper caught | only ciphertext, tamper caught | **✅ PASS** |
+| Reuse old/stolen session | no session needed | no session needed | old/stolen token refused | old/stolen token refused | **✅ PASS** |
+| Script injection (XSS) | script runs | script runs | shown as text | shown as text | **✅ PASS** |
 
 ---
 
@@ -18,7 +23,7 @@ This report records the automated attack tests executed against **Client v1** (N
 
 ### Attack 1: Man-In-The-Middle (MITM) Key Swap
 - **Client v1 Result**: `succeeds silently`. Because Client v1 lacks public-key cryptographic binding, an attacker can register a handle or substitute endpoints without alerting either user.
-- **Client v2 Defense**: `caught by fingerprint check`. Client v2 generates permanent Ed25519 identity keypairs that sign X25519 exchange keys. Alice and Bob calculate a deterministic out-of-band safety number (SHA-256 / BLAKE2b fingerprint over sorted public identity keys). Any rogue key swap causes fingerprint mismatch and drops communication.
+- **Client v2 Defense**: `key change detected`. In this test the server itself swaps Bob's public keys for Mallory's after Alice has already talked to Bob. Mallory's keys carry a valid signature, so a signature check alone would not notice. Client v2 remembers the first identity key it saw for each contact (trust on first use), raises `KEY_CHANGED`, and refuses to encrypt anything to the new key until the user compares the safety number again (the safety number is a BLAKE2b hash of both identity keys).
 
 ### Attack 2: Replay Captured Message
 - **Client v1 Result**: `accepted twice`. Client v1 does not maintain monotonic counters or nonces. Re-posting an intercepted ciphertext causes it to be rendered again in the UI.
@@ -35,3 +40,23 @@ This report records the automated attack tests executed against **Client v1** (N
 ### Attack 5: Open Expired Message
 - **Client v1 Result**: `still readable`. Messages persist forever in the database.
 - **Client v2 Defense**: `key gone, undecryptable`. Client v2 sets server TTL purge timestamps, deletes one-time view records from the server immediately upon viewing, and explicitly wipes in-memory per-message keys using `sodium.memzero()`.
+
+### Attack 6: Unauthorized Access
+- **Client v1 Result**: `all succeed`. The v1 API (`/api/v1/...`) has no login, so Mallory can read Bob's inbox, send a message as Alice and delete Bob's messages.
+- **Client v2 Defense**: `blocked (401/403/404/429)`. Every v2 call needs a session token (Argon2id password login, token stored only as a SHA-256 hash, 24h expiry). The server takes the user from the token, so Mallory can't overwrite Bob's keys, read his inbox (403), send as Alice or delete his messages (404). Six wrong passwords in a minute get HTTP 429, and logout ends the session.
+
+### Attack 7: Forged Telegram Login
+- **Client v1 Result**: `any name accepted`. v1 has no login, so Mallory just uses the victim's name and sends messages as them.
+- **Client v2 Defense**: `forged login rejected`. The Mini App sends Telegram's signed `initData` to `/api/tg/auth`. The server recomputes Telegram's HMAC-SHA256 (secret key = HMAC-SHA256 of the bot token keyed with `WebAppData`) over the sorted fields and compares it in constant time. A made-up hash, a missing hash, a user id changed after signing, a repeated field, and data older than one hour are all refused. Names starting with `tg_` can't be registered or used with a password, so the only way into a Telegram account is a genuine Telegram signature. The test signs with its own made-up bot token, never the real one.
+
+### Attack 8: Telegram Reads the Chat
+- **Client v1 Result**: `Telegram reads it`. Normal Telegram chats are not end-to-end encrypted, so plain text pasted there is readable on Telegram's servers.
+- **Client v2 Defense**: `only ciphertext, tamper caught`. CipherBridge seals the message as a `🔒SM2:` text (the signed v2 envelope with `channel: telegram`). The text Telegram stores has no plaintext; Mallory's keys can't open it; a changed character or header fails the Poly1305 tag and the Ed25519 signature; and opening the same copy twice is refused as a replay. Telegram still sees who is in the chat and when (metadata).
+
+### Attack 9: Reuse an Old or Stolen Session
+- **Client v1 Result**: `no session needed`. v1 has no sessions: anyone reads Bob's inbox just by putting his name in the URL.
+- **Client v2 Defense**: `old/stolen token refused`. A token stops working the moment Bob logs out and once it expires (checked on every request). The database keeps only a SHA-256 hash of each token, so a stolen copy of the sessions table gives Mallory nothing she can log in with; sending the hash itself is refused. A made-up token is refused. The lab dump endpoint answers 404 unless the server was started with `LAB_MODE=1`.
+
+### Attack 10: Script Injection (XSS)
+- **Client v1 Result**: `script runs`. v1 accepts any sender name, so Mallory calls herself `<img src=x onerror=alert(1)>`, and the v1 page draws the sender with `innerHTML`, which runs her script in the victim's page.
+- **Client v2 Defense**: `shown as text`. v2 usernames may only contain a-z, 0-9, `_` and `-`, so HTML names are refused at sign-up. An HTML message arrives as exactly the characters that were typed. The test also scans every v2 and Mini App page script and finds no HTML sink (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`): all text goes on the page with `textContent`. This is a check of the code, not a run in a real browser.

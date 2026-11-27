@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/login",
+    "body": { "username": "alice", "password": "<at least 8 characters>" }
+  },
+  "response": {
+    "status": 200,
+    "body": { "token": "<random 43-character token>", "expires_at": "2026-11-28 12:00:00", "username": "alice" }
+  },
+  "errors": { "401": "Invalid username or password (same text for both)", "429": "Too many attempts, wait a minute" }
+}
